@@ -10,15 +10,18 @@ function getInitials(nombre: string, apellido: string) {
 
 function App() {
   // --- ESTADOS DE LA APLICACIÓN ---
-  const [vistaActual, setVistaActual] = useState<'login' | 'registro' | 'perfil' | 'equipos' | 'evaluar' | 'admin_panel'>('login');
+  const [vistaActual, setVistaActual] = useState<'login' | 'registro' | 'perfil' | 'equipos' | 'evaluar' | 'resultados' | 'admin_panel'>('login');
   const [usuarioLogueado, setUsuarioLogueado] = useState<Usuario | null>(null);
   
   const [listaUsuarios, setListaUsuarios] = useState<Usuario[]>([]);
   const [listaEquipos, setListaEquipos] = useState<Equipo[]>([]);
   const [listaExposiciones, setListaExposiciones] = useState<Exposicion[]>([]);
+  
+  // Historial global de calificaciones simuladas para poblar la interfaz
   const [listaCalificaciones, setListaCalificaciones] = useState<any[]>([
-    { id: 1, evaluador: 'Juan Pablo Prog', equipo: 'Los Analistas de Software', expo: 'Arquitectura REST y Node.js', nota: 9.5, comentario: 'Excelente dominio del tema y las diapositivas.' },
-    { id: 2, evaluador: 'Maria Lopez', equipo: 'Desarrolladores Alfa', expo: 'Modelado de Bases de Datos', nota: 8.8, comentario: 'Buen material visual, faltó profundizar en las llaves foráneas.' }
+    { id: 1, evaluador: 'administrador@gmail.com', equipo: 'Los Analistas de Software', expo: 'Arquitectura REST y Node.js', nota: 9.5, comentario: 'Excelente dominio del tema, la explicación de los endpoints fue muy clara.' },
+    { id: 2, evaluador: 'Maria Lopez', equipo: 'Desarrolladores Alfa', expo: 'Modelado de Bases de Datos', nota: 8.8, comentario: 'Buen material visual, pero faltó profundizar un poco más en las llaves foráneas.' },
+    { id: 3, evaluador: 'Juan Pablo Prog', equipo: 'Desarrolladores Alfa', expo: 'Modelado de Bases de Datos', nota: 9.2, comentario: 'Excelente diseño de tablas y normalización.' }
   ]);
 
   const [criterios] = useState<any[]>([
@@ -83,7 +86,11 @@ function App() {
     }
 
     const hCalif = localStorage.getItem('faked_calificaciones');
-    if (hCalif) setListaCalificaciones(JSON.parse(hCalif));
+    if (hCalif) {
+      setListaCalificaciones(JSON.parse(hCalif));
+    } else {
+      localStorage.setItem('faked_calificaciones', JSON.stringify(listaCalificaciones));
+    }
 
     const sesionActiva = localStorage.getItem('faked_sesion_activa');
     if (sesionActiva) {
@@ -302,7 +309,6 @@ function App() {
     localStorage.setItem('faked_usuarios', JSON.stringify(filtrados));
   };
 
-  // GENERADOR PDF REAL (Impresión ejecutiva limpia)
   const descargarReportePDF = () => {
     window.print();
   };
@@ -311,6 +317,14 @@ function App() {
     localStorage.removeItem('faked_sesion_activa');
     setUsuarioLogueado(null);
     setVistaActual('login');
+  };
+
+  // Saber a qué equipo pertenece el alumno logueado actualmente
+  const obtenerEquipoDelUsuario = () => {
+    if (!usuarioLogueado) return "";
+    const miNombreCompleto = `${usuarioLogueado.nombre} ${usuarioLogueado.apellido}`;
+    const miEquipo = listaEquipos.find(eq => eq.miembros?.includes(miNombreCompleto));
+    return miEquipo ? miEquipo.nombre_equipo : "";
   };
 
   return (
@@ -324,6 +338,7 @@ function App() {
             <button className={vistaActual === 'perfil' ? 'active' : ''} onClick={() => setVistaActual('perfil')}>Perfil</button>
             <button className={vistaActual === 'equipos' ? 'active' : ''} onClick={() => setVistaActual('equipos')}>Equipos</button>
             <button className={vistaActual === 'evaluar' ? 'active' : ''} onClick={() => setVistaActual('evaluar')}>Calificar</button>
+            <button className={vistaActual === 'resultados' ? 'active' : ''} onClick={() => setVistaActual('resultados')}>Resultados</button>
             {usuarioLogueado.rol === 'admin' && (
               <button className={vistaActual === 'admin_panel' ? 'active' : ''} style={{ background: 'var(--indigo-50)', color: 'var(--indigo-700)', fontWeight: 'bold' }} onClick={() => setVistaActual('admin_panel')}>Panel Admin</button>
             )}
@@ -520,11 +535,61 @@ function App() {
         </div>
       )}
 
+      {/* ── PESTAÑA DE RESULTADOS (VISTA PARA ALUMNOS Y TODOS) ── */}
+      {vistaActual === 'resultados' && (
+        <div className="card">
+          <h3>Resultados de Evaluaciones</h3>
+          <p style={{ color: 'var(--slate-400)', marginTop: '-12px', marginBottom: '24px', fontSize: '0.9rem' }}>
+            Aquí puedes ver el desglose de puntajes y comentarios emitidos en la plataforma.
+          </p>
+
+          {/* Bloque Destacado: Calificaciones de MI EQUIPO */}
+          {obtenerEquipoDelUsuario() && (
+            <div style={{ background: 'var(--indigo-50)', padding: '16px', borderRadius: '8px', borderLeft: '5px solid var(--indigo-600)', marginBottom: '24px' }}>
+              <h4 style={{ color: 'var(--indigo-800)', margin: '0 0 10px 0' }}>⭐ Mi Equipo: {obtenerEquipoDelUsuario()}</h4>
+              {listaCalificaciones.filter(c => c.equipo === obtenerEquipoDelUsuario()).length === 0 ? (
+                <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--slate-500)' }}>Tu equipo aún no tiene retroalimentaciones registradas.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {listaCalificaciones.filter(c => c.equipo === obtenerEquipoDelUsuario()).map(c => (
+                    <div key={c.id} style={{ background: '#fff', padding: '10px', borderRadius: '6px', border: '1px solid var(--indigo-100)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.9rem', fontWeight: '600' }}>Tema: {c.expo}</span>
+                        <span style={{ fontWeight: 'bold', color: 'var(--indigo-600)' }}>Nota: {c.nota}</span>
+                      </div>
+                      <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'var(--slate-600)', fontStyle: 'italic' }}>💬 {c.comentario}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Historial General del resto de la clase */}
+          <h4>Calificaciones Generales de la Clase</h4>
+          {listaCalificaciones.length === 0 ? (
+            <p style={{ color: 'var(--slate-400)' }}>No hay calificaciones registradas todavía.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {listaCalificaciones.map(c => (
+                <div key={c.id} style={{ border: '1px solid var(--slate-200)', padding: '14px', borderRadius: '6px', background: '#fff' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <strong style={{ fontSize: '0.95rem', color: 'var(--slate-800)' }}>🎯 Equipo: {c.equipo} — {c.expo}</strong>
+                    <span style={{ fontWeight: 'bold', color: 'var(--slate-700)', background: 'var(--slate-100)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.9rem' }}>Puntaje: {c.nota}</span>
+                  </div>
+                  <p style={{ margin: '6px 0 0', fontSize: '0.85rem', color: 'var(--slate-600)' }}>💬 {c.comentario}</p>
+                  <small style={{ color: 'var(--slate-400)', display: 'block', marginTop: '4px' }}>Evaluado por: {c.evaluador}</small>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── PANEL DE ADMINISTRADOR ── */}
       {vistaActual === 'admin_panel' && usuarioLogueado?.rol === 'admin' && (
         <div className="card" style={{ maxWidth: '900px' }}>
           
-          {/* Bloque visible solo al imprimir en papel/PDF */}
           <div className="only-print" style={{ marginBottom: '30px', borderBottom: '3px solid #4f46e5', paddingBottom: '10px' }}>
             <h1 style={{ color: '#4f46e5', margin: '0 0 4px 0' }}>ExposCalif — Reporte Institucional</h1>
             <p style={{ margin: 0, color: '#64748b', fontSize: '0.95rem' }}>Historial ejecutivo de evaluaciones consolidadas del grupo.</p>
