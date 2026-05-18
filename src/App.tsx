@@ -30,25 +30,23 @@ function App() {
   const [calificacionesInput, setCalificacionesInput] = useState<{ [key: string]: { [critId: number]: number } }>({});
   const [comentariosInput, setComentariosInput] = useState<{ [key: string]: string }>({});
 
-  // --- PERSISTENCIA LOCAL COMPLETAMENTE FAKED ---
+  // --- PERSISTENCIA LOCAL ---
   
-  // Obtener usuarios locales creados en este navegador
   const getUsuariosLocales = (): Usuario[] => {
     const users = localStorage.getItem('faked_usuarios');
     return users ? JSON.parse(users) : [
       {
-        id: 'c21aa13c-83c2-4423-9485-5a516b', // Vinculado a tu script de DB
+        id: 'c21aa13c-83c2-4423-9485-5a516b',
         email: 'administrador@gmail.com',
         nombre: 'Emilio',
         apellido: 'Biches',
         rol: 'admin',
         matricula: 'DOC-001',
-        password: 'admin' // Para la simulación del login
+        password: 'admin'
       }
     ];
   };
 
-  // Recuperar sesión activa al recargar la página
   useEffect(() => {
     const sesionActiva = localStorage.getItem('faked_sesion_activa');
     if (sesionActiva) {
@@ -56,7 +54,6 @@ function App() {
       setVistaActual('perfil');
     }
 
-    // Inicializar Equipos Globales en LocalStorage si no existen
     if (!localStorage.getItem('faked_equipos')) {
       localStorage.setItem('faked_equipos', JSON.stringify(equiposSimulados));
       setListaEquipos(equiposSimulados);
@@ -64,7 +61,6 @@ function App() {
       setListaEquipos(JSON.parse(localStorage.getItem('faked_equipos')!));
     }
 
-    // Inicializar Exposiciones Globales en LocalStorage si no existen
     if (!localStorage.getItem('faked_exposiciones')) {
       localStorage.setItem('faked_exposiciones', JSON.stringify(exposicionesSimuladas));
       setListaExposiciones(exposicionesSimuladas);
@@ -75,12 +71,9 @@ function App() {
 
   // --- MANEJADORES DE ACCIONES ---
 
-  // LOGIN COMPLETAMENTE SIMULADO
   const ejecutarLogin = (e: React.FormEvent) => {
     e.preventDefault();
     const usuarios = getUsuariosLocales();
-    
-    // Buscar si existe el usuario con esas credenciales exactas
     const usuarioEncontrado = usuarios.find(u => u.email === email && (u as any).password === password);
 
     if (usuarioEncontrado) {
@@ -94,7 +87,6 @@ function App() {
     }
   };
 
-  // REGISTRO COMPLETAMENTE SIMULADO (Guarda en la BD interna del navegador)
   const ejecutarRegistro = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -105,13 +97,11 @@ function App() {
 
     const usuarios = getUsuariosLocales();
 
-    // Validar si el correo ya existe en el ambiente simulado
     if (usuarios.some(u => u.email === email)) {
       alert('Error en el registro: Este correo electrónico ya está registrado.');
       return;
     }
 
-    // Estructurado idéntico a tu Script de PostgreSQL
     const nuevoUsuario: Usuario = {
       id: crypto.randomUUID(), 
       matricula: matricula || `A${Math.floor(100000 + Math.random() * 900000)}`,
@@ -120,17 +110,16 @@ function App() {
       email,
       rol: 'alumno'
     };
-    (nuevoUsuario as any).password = password; // Inyectar pass para el login de simulación
+    (nuevoUsuario as any).password = password;
 
     const nuevaListaUsuarios = [...usuarios, nuevoUsuario];
     localStorage.setItem('faked_usuarios', JSON.stringify(nuevaListaUsuarios));
 
-    alert('¡Cuenta creada correctamente en ExposCalif! Ya puedes iniciar sesión con tus credenciales.');
+    alert('¡Cuenta creada correctamente! Ya puedes iniciar sesión con tus credenciales.');
     setNombre(''); setApellido(''); setMatricula(''); setEmail(''); setPassword('');
     setVistaActual('login');
   };
 
-  // CREAR EQUIPO EN TIEMPO REAL
   const crearEquipo = (e: React.FormEvent) => {
     e.preventDefault();
     if (!nombreNuevoEquipo.trim()) return;
@@ -147,10 +136,9 @@ function App() {
     setListaEquipos(nuevosEquipos);
     localStorage.setItem('faked_equipos', JSON.stringify(nuevosEquipos));
     setNombreNuevoEquipo('');
-    alert(`Equipo "${nombreNuevoEquipo}" registrado exitosamente.`);
+    alert(`Equipo "${nombreNuevoEquipo}" creado exitosamente.`);
   };
 
-  // UNIRSE A UN EQUIPO EXISTENTE
   const unirseAEquipo = (idEquipo: number) => {
     if (!usuarioLogueado) return;
     const nombreCompleto = `${usuarioLogueado.nombre} ${usuarioLogueado.apellido}`;
@@ -167,14 +155,12 @@ function App() {
 
     setListaEquipos(nuevosEquipos);
     localStorage.setItem('faked_equipos', JSON.stringify(nuevosEquipos));
-    alert('Te has integrado al equipo de manera exitosa.');
+    alert('Te has unido al equipo de manera exitosa.');
   };
 
-  // ENVIAR CALIFICACIÓN SIMULADA
   const enviarCalificacionReal = (idExposicion: number, nombreEquipo: string) => {
-    alert(`¡Evaluación guardada exitosamente para el equipo "${nombreEquipo}"! Calificación registrada en el sistema.`);
+    alert(`¡Evaluación guardada exitosamente para el equipo "${nombreEquipo}"!`);
     
-    // Limpiar campos de esa exposición calificada
     setCalificacionesInput(prev => {
       const copia = { ...prev };
       delete copia[idExposicion];
@@ -227,7 +213,7 @@ function App() {
           <div className="hint-box">
             💡 Profesor / Admin: <strong>administrador@gmail.com</strong> — contraseña: <strong>admin</strong>
             <br />
-            👨‍🎓 Alumnos: Pueden registrarse en la opción de abajo para crear su propio usuario de pruebas.
+            👨‍🎓 Alumnos: Pueden registrarse abajo para crear su usuario en <strong>ExposCalif</strong>.
           </div>
           <form onSubmit={ejecutarLogin}>
             <div className="form-group">
@@ -291,9 +277,6 @@ function App() {
       {vistaActual === 'perfil' && usuarioLogueado && (
         <div className="card">
           <h3>Mi perfil</h3>
-          <div className="hint-box" style={{ marginBottom: '20px', background: '#ecfdf5', borderColor: '#a7f3d0', color: '#065f46' }}>
-            ✅ Conectado exitosamente al entorno de simulación local interactivo.
-          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '18px', marginBottom: '28px' }}>
             <div className="avatar">
               {getInitials(usuarioLogueado.nombre || 'U', usuarioLogueado.apellido || 'N')}
