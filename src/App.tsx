@@ -13,12 +13,12 @@ function App() {
   const [vistaActual, setVistaActual] = useState<'login' | 'registro' | 'perfil' | 'equipos' | 'evaluar' | 'admin_panel'>('login');
   const [usuarioLogueado, setUsuarioLogueado] = useState<Usuario | null>(null);
   
-  // Base de datos simulada en memoria reactiva
   const [listaUsuarios, setListaUsuarios] = useState<Usuario[]>([]);
   const [listaEquipos, setListaEquipos] = useState<Equipo[]>([]);
   const [listaExposiciones, setListaExposiciones] = useState<Exposicion[]>([]);
   const [listaCalificaciones, setListaCalificaciones] = useState<any[]>([
-    { id: 1, evaluador: 'Juan Pablo Prog', equipo: 'Los Analistas de Software', expo: 'Arquitectura REST y Node.js', nota: 9.5, comentario: 'Excelente dominio del tema y las diapositivas.' }
+    { id: 1, evaluador: 'Juan Pablo Prog', equipo: 'Los Analistas de Software', expo: 'Arquitectura REST y Node.js', nota: 9.5, comentario: 'Excelente dominio del tema y las diapositivas.' },
+    { id: 2, evaluador: 'Maria Lopez', equipo: 'Desarrolladores Alfa', expo: 'Modelado de Bases de Datos', nota: 8.8, comentario: 'Buen material visual, faltó profundizar en las llaves foráneas.' }
   ]);
 
   const [criterios] = useState<any[]>([
@@ -34,31 +34,25 @@ function App() {
   const [apellido, setApellido] = useState('');
   const [matricula, setMatricula] = useState('');
   
-  // Crear Entidades
   const [nombreNuevoEquipo, setNombreNuevoEquipo] = useState('');
   const [tituloNuevaExpo, setTituloNuevaExpo] = useState('');
   const [equipoNuevaExpo, setEquipoNuevaExpo] = useState('');
   const [fechaNuevaExpo, setFechaNuevaExpo] = useState('');
 
-  // Edición de Perfil Activo
   const [editNombre, setEditNombre] = useState('');
   const [editApellido, setEditApellido] = useState('');
   const [editMatricula, setEditMatricula] = useState('');
 
-  // Edición de Usuarios (Admin)
   const [usuarioEditandoId, setUsuarioEditandoId] = useState<string | null>(null);
   const [userFormNombre, setUserFormNombre] = useState('');
   const [userFormApellido, setUserFormApellido] = useState('');
   const [userFormMatricula, setUserFormMatricula] = useState('');
   const [userFormRol, setUserFormRol] = useState<'alumno' | 'docente' | 'admin'>('alumno');
 
-  // Calificaciones Inputs
   const [calificacionesInput, setCalificacionesInput] = useState<{ [key: string]: { [critId: number]: number } }>({});
   const [comentariosInput, setComentariosInput] = useState<{ [key: string]: string }>({});
 
-  // --- PERSISTENCIA LOCAL ---
   useEffect(() => {
-    // Cargar Usuarios
     const users = localStorage.getItem('faked_usuarios');
     let dbUsuarios = users ? JSON.parse(users) : [
       {
@@ -74,7 +68,6 @@ function App() {
     setListaUsuarios(dbUsuarios);
     if (!users) localStorage.setItem('faked_usuarios', JSON.stringify(dbUsuarios));
 
-    // Cargar Equipos
     if (!localStorage.getItem('faked_equipos')) {
       localStorage.setItem('faked_equipos', JSON.stringify(equiposSimulados));
       setListaEquipos(equiposSimulados);
@@ -82,7 +75,6 @@ function App() {
       setListaEquipos(JSON.parse(localStorage.getItem('faked_equipos')!));
     }
 
-    // Cargar Exposiciones
     if (!localStorage.getItem('faked_exposiciones')) {
       localStorage.setItem('faked_exposiciones', JSON.stringify(exposicionesSimuladas));
       setListaExposiciones(exposicionesSimuladas);
@@ -90,11 +82,9 @@ function App() {
       setListaExposiciones(JSON.parse(localStorage.getItem('faked_exposiciones')!));
     }
 
-    // Cargar Calificaciones Historicas
     const hCalif = localStorage.getItem('faked_calificaciones');
     if (hCalif) setListaCalificaciones(JSON.parse(hCalif));
 
-    // Sesión activa
     const sesionActiva = localStorage.getItem('faked_sesion_activa');
     if (sesionActiva) {
       const user = JSON.parse(sesionActiva);
@@ -106,7 +96,18 @@ function App() {
     }
   }, []);
 
-  // --- ACCIONES ---
+  // --- MANEJADORES ---
+  const handleScoreChange = (expoId: number, critId: number, valor: number) => {
+    setCalificacionesInput(prev => ({
+      ...prev,
+      [expoId]: { ...(prev[expoId] || {}), [critId]: valor }
+    }));
+  };
+
+  const handleCommentChange = (expoId: number, valor: string) => {
+    setComentariosInput(prev => ({ ...prev, [expoId]: valor }));
+  };
+
   const ejecutarLogin = (e: React.FormEvent) => {
     e.preventDefault();
     const usuarioEncontrado = listaUsuarios.find(u => u.email === email && (u as any).password === password);
@@ -166,12 +167,10 @@ function App() {
       matricula: editMatricula
     };
 
-    // Actualizar en lista global
     const nuevosUsuarios = listaUsuarios.map(u => u.id === usuarioLogueado.id ? usuarioActualizado : u);
     setListaUsuarios(nuevosUsuarios);
     localStorage.setItem('faked_usuarios', JSON.stringify(nuevosUsuarios));
 
-    // Actualizar sesión
     setUsuarioLogueado(usuarioActualizado);
     localStorage.setItem('faked_sesion_activa', JSON.stringify(usuarioActualizado));
     alert('Perfil actualizado correctamente.');
@@ -272,7 +271,6 @@ function App() {
     setComentariosInput(prev => { const c = { ...prev }; delete c[idExposicion]; return c; });
   };
 
-  // ADMINISTRACIÓN DE USUARIOS
   const iniciarEdicionUsuario = (u: Usuario) => {
     setUsuarioEditandoId(u.id);
     setUserFormNombre(u.nombre);
@@ -304,8 +302,9 @@ function App() {
     localStorage.setItem('faked_usuarios', JSON.stringify(filtrados));
   };
 
+  // GENERADOR PDF REAL (Impresión ejecutiva limpia)
   const descargarReportePDF = () => {
-    alert('📥 Generando Reporte Ejecutivo de Evaluaciones...\n\nEl archivo "Reporte_ExposCalif.pdf" se ha compilado y guardado en descargas con éxito.');
+    window.print();
   };
 
   const ejecutarLogout = () => {
@@ -318,7 +317,7 @@ function App() {
     <div className="app-container">
 
       {/* ── HEADER ── */}
-      <header className="app-header">
+      <header className="app-header no-print">
         <h2 className="app-title">ExposCalif</h2>
         {usuarioLogueado && (
           <nav className="app-nav">
@@ -335,7 +334,7 @@ function App() {
 
       {/* ── LOGIN ── */}
       {vistaActual === 'login' && (
-        <div className="card">
+        <div className="card no-print">
           <h3>Bienvenido</h3>
           <form onSubmit={ejecutarLogin}>
             <div className="form-group">
@@ -359,7 +358,7 @@ function App() {
 
       {/* ── REGISTRO ── */}
       {vistaActual === 'registro' && (
-        <div className="card">
+        <div className="card no-print">
           <h3>Crear cuenta</h3>
           <form onSubmit={ejecutarRegistro}>
             <div className="flex-row">
@@ -395,9 +394,9 @@ function App() {
         </div>
       )}
 
-      {/* ── PERFIL (EDITABLE) ── */}
+      {/* ── PERFIL ── */}
       {vistaActual === 'perfil' && usuarioLogueado && (
-        <div className="card">
+        <div className="card no-print">
           <h3>Mi perfil</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: '18px', marginBottom: '24px' }}>
             <div className="avatar">{getInitials(usuarioLogueado.nombre, usuarioLogueado.apellido)}</div>
@@ -433,7 +432,7 @@ function App() {
 
       {/* ── EQUIPOS ── */}
       {vistaActual === 'equipos' && (
-        <div className="card">
+        <div className="card no-print">
           <h3>Gestión de Equipos</h3>
           <h4>Registrar nuevo equipo</h4>
           <form onSubmit={crearEquipo} style={{ marginBottom: '32px' }}>
@@ -465,7 +464,7 @@ function App() {
 
       {/* ── CALIFICAR EXPOSICIONES ── */}
       {vistaActual === 'evaluar' && (
-        <div className="card">
+        <div className="card no-print">
           <h3>Evaluar Exposiciones</h3>
           
           {usuarioLogueado?.rol !== 'admin' && (
@@ -521,17 +520,24 @@ function App() {
         </div>
       )}
 
-      {/* ── PANEL DE ADMINISTRADOR EXCLUSIVO ── */}
+      {/* ── PANEL DE ADMINISTRADOR ── */}
       {vistaActual === 'admin_panel' && usuarioLogueado?.rol === 'admin' && (
         <div className="card" style={{ maxWidth: '900px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          
+          {/* Bloque visible solo al imprimir en papel/PDF */}
+          <div className="only-print" style={{ marginBottom: '30px', borderBottom: '3px solid #4f46e5', paddingBottom: '10px' }}>
+            <h1 style={{ color: '#4f46e5', margin: '0 0 4px 0' }}>ExposCalif — Reporte Institucional</h1>
+            <p style={{ margin: 0, color: '#64748b', fontSize: '0.95rem' }}>Historial ejecutivo de evaluaciones consolidadas del grupo.</p>
+            <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#94a3b8' }}>Generado por Administrador: {usuarioLogueado.nombre} {usuarioLogueado.apellido} en fecha: {new Date().toLocaleDateString()}</p>
+          </div>
+
+          <div className="flex-row no-print" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <h3>Panel de Control del Administrador</h3>
             <button className="btn btn-primary" style={{ width: 'auto', background: 'var(--indigo-600)' }} onClick={descargarReportePDF}>📑 Exportar a PDF</button>
           </div>
 
-          {/* CREACIÓN DIRECTA ADMIN */}
-          <div style={{ background: 'var(--slate-50)', padding: '16px', borderRadius: '8px', marginBottom: '24px' }}>
-            <h4>Programación Directa de Exposiciones (Rápida)</h4>
+          <div className="no-print" style={{ background: 'var(--slate-50)', padding: '16px', borderRadius: '8px', marginBottom: '24px' }}>
+            <h4>Programación Directa de Exposiciones</h4>
             <div className="flex-row">
               <input type="text" placeholder="Título de exposición..." className="form-input" value={tituloNuevaExpo} onChange={e => setTituloNuevaExpo(e.target.value)} />
               <select className="form-input" value={equipoNuevaExpo} onChange={e => setEquipoNuevaExpo(e.target.value)}>
@@ -542,9 +548,8 @@ function App() {
             </div>
           </div>
 
-          {/* MODIFICAR USUARIOS */}
-          <h4>Control de Usuarios Registrados</h4>
-          <div style={{ overflowX: 'auto', marginBottom: '32px' }}>
+          <h4 className="no-print">Control de Usuarios Registrados</h4>
+          <div className="no-print" style={{ overflowX: 'auto', marginBottom: '32px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
               <thead>
                 <tr style={{ background: 'var(--slate-100)', borderBottom: '2px solid var(--slate-200)' }}>
@@ -597,18 +602,17 @@ function App() {
             </table>
           </div>
 
-          {/* VER HISTORIAL DE CALIFICACIONES */}
-          <h4>Historial Global de Calificaciones Recibidas</h4>
+          <h4>Historial Global de Calificaciones Emitidas</h4>
           {listaCalificaciones.length === 0 ? <p style={{ color: 'var(--slate-400)' }}>Nadie ha evaluado aún.</p> : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {listaCalificaciones.map(c => (
-                <div key={c.id} style={{ border: '1px solid var(--slate-200)', padding: '12px', borderRadius: '6px', background: '#fff' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <strong>🎯 Equipo: {c.equipo} ({c.expo})</strong>
-                    <span style={{ fontWeight: 'bold', color: 'var(--indigo-600)', background: 'var(--indigo-50)', padding: '2px 8px', borderRadius: '4px' }}>Puntaje: {c.nota}</span>
+                <div key={c.id} style={{ border: '1px solid var(--slate-200)', padding: '14px', borderRadius: '6px', background: '#fff', pageBreakInside: 'avoid' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <strong style={{ fontSize: '1rem', color: '#1e293b' }}>🎯 Equipo: {c.equipo} — {c.expo}</strong>
+                    <span style={{ fontWeight: 'bold', color: '#4f46e5', background: '#f5f3ff', padding: '4px 10px', borderRadius: '4px', fontSize: '0.95rem' }}>Puntaje: {c.nota}</span>
                   </div>
-                  <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'var(--slate-500)' }}>💬 {c.comentario}</p>
-                  <small style={{ color: 'var(--slate-400)', display: 'block', marginTop: '4px' }}>Emitido por: {c.evaluador}</small>
+                  <p style={{ margin: '6px 0 0', fontSize: '0.9rem', color: '#475569', fontStyle: 'italic' }}>💬 {c.comentario}</p>
+                  <small style={{ color: '#94a3b8', display: 'block', marginTop: '6px' }}>Emitido por: {c.evaluador}</small>
                 </div>
               ))}
             </div>
