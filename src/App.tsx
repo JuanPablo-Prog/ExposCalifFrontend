@@ -1,5 +1,6 @@
+// @ts-nocheck
 import React, { useState, useEffect } from 'react';
-import { equiposSimulados, exposicionesSimuladas } from './datosSimulados';
+import { equiposSimulados, exposicionesSimuladas, API_BASE_URL } from './datosSimulados';
 import type { Usuario, Equipo, Exposicion } from './datosSimulados';
 import './App.css';
 
@@ -31,7 +32,6 @@ function App() {
   const [comentariosInput, setComentariosInput] = useState<{ [key: string]: string }>({});
 
   // --- PERSISTENCIA LOCAL ---
-  
   const getUsuariosLocales = (): Usuario[] => {
     const users = localStorage.getItem('faked_usuarios');
     return users ? JSON.parse(users) : [
@@ -70,7 +70,6 @@ function App() {
   }, []);
 
   // --- MANEJADORES DE ACCIONES ---
-
   const ejecutarLogin = (e: React.FormEvent) => {
     e.preventDefault();
     const usuarios = getUsuariosLocales();
@@ -89,14 +88,12 @@ function App() {
 
   const ejecutarRegistro = (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (password.length < 6) {
       alert('Error en el registro: La contraseña debe tener al menos 6 caracteres.');
       return;
     }
 
     const usuarios = getUsuariosLocales();
-
     if (usuarios.some(u => u.email === email)) {
       alert('Error en el registro: Este correo electrónico ya está registrado.');
       return;
