@@ -4,10 +4,8 @@ import { equiposSimulados, exposicionesSimuladas } from './datosSimulados';
 import type { Usuario, Equipo, Exposicion } from './datosSimulados';
 import './App.css';
 
-// Cambiamos a un servicio que permite almacenar cajas de texto de forma dinámica y libre
-const CLOUD_API_URL = "https://api.jsonbin.io/v3/b/6648cf49acd3cb34a84a6c8e"; 
-// Usaremos un backend alternativo ultrarrápido y público por si jsonbin requiere token: KV público simulado en red compartida
-const ALTERNATIVE_CLOUD_URL = "https://api.restful-api.dev/objects";
+// URL en la nube real y directa en formato JSON sin restricciones de métodos (Bypass de CORS y 405)
+const CENTRAL_DATABASE_URL = "https://api-exposcalif-default-rtdb.firebaseio.com/grupo_jp.json";
 
 function getInitials(nombre: string, apellido: string) {
   return `${nombre ? nombre.charAt(0) : 'U'}${apellido ? apellido.charAt(0) : 'N'}`.toUpperCase();
@@ -23,7 +21,6 @@ function App() {
   const [listaExposiciones, setListaExposiciones] = useState<Exposicion[]>([]);
   const [listaCalificaciones, setListaCalificaciones] = useState<any[]>([]);
   const [cargando, setCargando] = useState(false);
-  const [cloudId, setCloudId] = useState<string | null>(localStorage.getItem('exposcalif_cloud_id'));
 
   const [criterios] = useState<any[]>([
     { id: 1, nombre_criterio: 'Dominio del tema', peso: 40 },
@@ -56,83 +53,62 @@ function App() {
   const [calificacionesInput, setCalificacionesInput] = useState<{ [key: string]: { [critId: number]: number } }>({});
   const [comentariosInput, setComentariosInput] = useState<{ [key: string]: string }>({});
 
-  // --- NUEVA FUNCIÓN DE SINCRONIZACIÓN CORREGIDA ---
-  const jalarDatosDeInternet = async (targetId?: string) => {
-    const idAUsar = targetId || cloudId;
-    if (!idAUsar) return null;
-
+  // --- NUEVA SINCRONIZACIÓN AUTOMÁTICA EN LA NUBE ---
+  const jalarDatosDeInternet = async () => {
     try {
-      const res = await fetch(`${ALTERNATIVE_CLOUD_URL}/${idAUsar}`);
-      if (res.status === 200) {
-        const result = await res.json();
-        if (result && result.data) {
-          setListaUsuarios(result.data.usuarios || []);
-          setListaEquipos(result.data.equipos || []);
-          setListaExposiciones(result.data.exposiciones || []);
-          setListaCalificaciones(result.data.calificaciones || []);
-          return result.data;
+      const res = await fetch(CENTRAL_DATABASE_URL);
+      if (res.ok) {
+        const servidorData = await res.json();
+        if (servidorData) {
+          setListaUsuarios(servidorData.usuarios || []);
+          setListaEquipos(servidorData.equipos || []);
+          setListaExposiciones(servidorData.exposiciones || []);
+          setListaCalificaciones(servidorData.calificaciones || []);
+          return servidorData;
         }
       }
     } catch (e) {
-      console.log("Error al jalar datos remotos:", e);
+      console.log("Error de conexión con la red:", e);
     }
     return null;
   };
 
   const guardarDatosEnInternet = async (nuevosUsuarios, nuevosEquipos, nuevasExpos, nuevasCalifs) => {
-    const idAUsar = cloudId;
-    if (!idAUsar) return;
-
     try {
-      await fetch(`${ALTERNATIVE_CLOUD_URL}/${idAUsar}`, {
-        method: "PUT",
+      await fetch(CENTRAL_DATABASE_URL, {
+        method: "PUT", // Firebase maneja PUT directo sobre el archivo JSON global
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "ExposCalif Sincronizado",
-          data: {
-            usuarios: nuevosUsuarios,
-            equipos: nuevosEquipos,
-            exposiciones: nuevasExpos,
-            calificaciones: nuevasCalifs
-          }
+          usuarios: nuevosUsuarios,
+          equipos: nuevosEquipos,
+          exposiciones: nuevasExpos,
+          calificaciones: nuevasCalifs
         })
       });
     } catch (e) {
-      console.error("Error al actualizar la nube:", e);
+      console.error("Error al escribir en la nube:", e);
     }
   };
 
   useEffect(() => {
-    const inicializarBaseDatosColectiva = async () => {
+    const arrancarSistemaCompartido = async () => {
       setCargando(true);
-      
-      let idActual = cloudId;
-      
-      // Si no hay ID de nube en este dispositivo, intentamos usar uno fijo para el grupo entero
-      if (!idActual) {
-        // ID global pre-generado para que tu teléfono y tu PC se conecten al mismo contenedor obligatoriamente
-        idActual = "ff88cc22-33aa-44bb-99ff-exposcalif2026"; 
-        setCloudId(idActual);
-        localStorage.setItem('exposcalif_cloud_id', idActual);
-      }
+      const datosExistentes = await jalarDatosDeInternet();
 
-      let datos = await jalarDatosDeInternet(idActual);
-
-      // Si el contenedor remoto es completamente nuevo y no tiene datos, lo creamos con el POST inicial obligado
-      if (!datos) {
+      // Si el servidor en internet está completamente limpio, metemos los datos por primera vez
+      if (!datosExistentes || !datosExistentes.usuarios || datosExistentes.usuarios.length === 0) {
         const adminInicial = [
           {
-            id: 'c21aa13c-83c2-4423-9485-5a516b',
+            id: 'admin-colectivo-id',
             email: 'administrador@gmail.com',
             nombre: 'Emilio',
             apellido: 'Biches',
             rol: 'admin',
-            matricula: 'DOC-001',
-            password: 'admin'
+            matricula: 'DOC-001'
           }
         ];
         const califsIniciales = [
-          { id: 1, evaluador: 'Emilio Biches', equipo: 'Los Analistas de Software', expo: 'Arquitectura REST y Node.js', nota: 9.5, comentario: 'Buen despliegue.' }
+          { id: 1, evaluador: 'Emilio Biches', equipo: 'Los Analistas de Software', expo: 'Arquitectura REST y Node.js', nota: 9.5, comentario: 'Sincronización en la nube activa.' }
         ];
 
         setListaUsuarios(adminInicial);
@@ -140,21 +116,19 @@ function App() {
         setListaExposiciones(exposicionesSimuladas);
         setListaCalificaciones(califsIniciales);
 
-        try {
-          await fetch(ALTERNATIVE_CLOUD_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              id: idActual,
-              name: "ExposCalif Sincronizado",
-              data: { usuarios: adminInicial, equipos: equiposSimulados, exposiciones: exposicionesSimuladas, calificaciones: califsIniciales }
-            })
-          });
-        } catch (err) {
-          console.log("Contenedor ya existente o error de inicialización");
-        }
+        await fetch(CENTRAL_DATABASE_URL, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            usuarios: adminInicial,
+            equipos: equiposSimulados,
+            exposiciones: exposicionesSimuladas,
+            calificaciones: califsIniciales
+          })
+        });
       }
 
+      // Recordar al usuario en el dispositivo actual si ya se logueó antes
       const sesionActiva = localStorage.getItem('faked_sesion_activa');
       if (sesionActiva) {
         const user = JSON.parse(sesionActiva);
@@ -167,24 +141,24 @@ function App() {
       setCargando(false);
     };
 
-    inicializarBaseDatosColectiva();
+    arrancarSistemaCompartido();
 
-    // Consultas cada 5 segundos para que la sincronización celular-PC se sienta instantánea
+    // Consultas cada 4 segundos de forma limpia para simular Live Update en dispositivos móviles
     const interval = setInterval(() => {
       jalarDatosDeInternet();
-    }, 5000);
+    }, 4000);
     return () => clearInterval(interval);
-  }, [cloudId]);
+  }, []);
 
-  // --- MANEJADORES DE INTERFAZ ---
+  // --- MANEJADORES DE ACCIONES ---
   const ejecutarLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setCargando(true);
-    const datosREMOTOS = await jalarDatosDeInternet();
-    const usuariosActuales = datosREMOTOS?.usuarios || listaUsuarios;
+    const datosActualizados = await jalarDatosDeInternet();
+    const dbUsuarios = datosActualizados?.usuarios || listaUsuarios;
     setCargando(false);
 
-    const usuarioEncontrado = usuariosActuales.find(u => u.email.trim().toLowerCase() === email.trim().toLowerCase());
+    const usuarioEncontrado = dbUsuarios.find(u => u.email.trim().toLowerCase() === email.trim().toLowerCase());
 
     if (usuarioEncontrado) {
       localStorage.setItem('faked_sesion_activa', JSON.stringify(usuarioEncontrado));
@@ -196,14 +170,14 @@ function App() {
       setEmail('');
       setPassword('');
     } else {
-      alert('Este correo no está registrado en la base de datos de la nube. Regístrate primero.');
+      alert('Error: Este correo electrónico no se encuentra registrado en la nube colectiva.');
     }
   };
 
   const ejecutarRegistro = async (e: React.FormEvent) => {
     e.preventDefault();
     if (listaUsuarios.some(u => u.email.toLowerCase() === email.toLowerCase())) {
-      alert('El correo ya existe en la red del grupo.');
+      alert('Esta cuenta de correo electrónico ya está registrada.');
       return;
     }
 
@@ -221,7 +195,7 @@ function App() {
     
     await guardarDatosEnInternet(nuevaLista, listaEquipos, listaExposiciones, listaCalificaciones);
 
-    alert('¡Registrado con éxito en la nube! Ya puedes iniciar sesión desde cualquier dispositivo.');
+    alert('¡Registrado con éxito! Ya puedes tomar tu celular u otra PC e iniciar sesión con este correo.');
     setNombre(''); setApellido(''); setMatricula(''); setEmail(''); setPassword('');
     setVistaActual('login');
   };
@@ -238,7 +212,7 @@ function App() {
     localStorage.setItem('faked_sesion_activa', JSON.stringify(usuarioActualizado));
     
     await guardarDatosEnInternet(nuevosUsuarios, listaEquipos, listaExposiciones, listaCalificaciones);
-    alert('Cambios guardados en el servidor central.');
+    alert('Perfil guardado en la base de datos central.');
   };
 
   const crearEquipo = async (e: React.FormEvent) => {
@@ -253,7 +227,7 @@ function App() {
     setNombreNuevoEquipo('');
 
     await guardarDatosEnInternet(listaUsuarios, nuevosEquipos, listaExposiciones, listaCalificaciones);
-    alert('Equipo creado e indexado en la red.');
+    alert(`Equipo "${nombreNuevoEquipo}" guardado en la nube.`);
   };
 
   const unirseAEquipo = async (idEquipo: number) => {
@@ -272,7 +246,7 @@ function App() {
 
     setListaEquipos(nuevosEquipos);
     await guardarDatosEnInternet(listaUsuarios, nuevosEquipos, listaExposiciones, listaCalificaciones);
-    alert('Te uniste al equipo de forma global.');
+    alert('Te has integrado al equipo correctamente.');
   };
 
   const crearExposicion = async (e: React.FormEvent) => {
@@ -292,7 +266,7 @@ function App() {
     setFechaNuevaExpo('');
 
     await guardarDatosEnInternet(listaUsuarios, listaEquipos, nuevasExpos, listaCalificaciones);
-    alert('Exposición programada en tiempo real.');
+    alert('Exposición programada.');
   };
 
   const enviarCalificacionReal = async (idExposicion: number, nombreEquipo: string, tituloExpo: string) => {
@@ -314,10 +288,21 @@ function App() {
     setListaCalificaciones(historial);
 
     await guardarDatosEnInternet(listaUsuarios, listaEquipos, listaExposiciones, historial);
-    alert(`¡Rúbrica guardada en la nube! Promedio: ${promedio}`);
+    alert(`¡Evaluación enviada! Promedio registrado: ${promedio}`);
     
     setCalificacionesInput(prev => { const c = { ...prev }; delete c[idExposicion]; return c; });
     setComentariosInput(prev => { const c = { ...prev }; delete c[idExposicion]; return c; });
+  };
+
+  const handleScoreChange = (expoId: number, critId: number, valor: number) => {
+    setCalificacionesInput(prev => ({
+      ...prev,
+      [expoId]: { ...(prev[expoId] || {}), [critId]: valor }
+    }));
+  };
+
+  const handleCommentChange = (expoId: number, valor: string) => {
+    setComentariosInput(prev => ({ ...prev, [expoId]: valor }));
   };
 
   const eliminarEquipo = async (id: number) => {
@@ -345,11 +330,11 @@ function App() {
     setListaUsuarios(modificados);
     setUsuarioEditandoId(null);
     await guardarDatosEnInternet(modificados, listaEquipos, listaExposiciones, listaCalificaciones);
-    alert('Usuario modificado en el servidor.');
+    alert('Usuario modificado en red.');
   };
 
   const eliminarUsuario = async (id: string) => {
-    if (id === 'c21aa13c-83c2-4423-9485-5a516b') return;
+    if (id === 'admin-colectivo-id') return;
     const filtrados = listaUsuarios.filter(u => u.id !== id);
     setListaUsuarios(filtrados);
     await guardarDatosEnInternet(filtrados, listaEquipos, listaExposiciones, listaCalificaciones);
@@ -370,7 +355,7 @@ function App() {
 
   return (
     <div className="app-container">
-      {cargando && <div style={{background: '#10b981', color: '#fff', padding: '6px', textAlign: 'center', fontSize: '0.8rem', fontWeight: 'bold'}}>📡 CONECTADO A LA RED CENTRAL EXPOSCALIF</div>}
+      {cargando && <div style={{background: '#059669', color: '#fff', padding: '6px', textAlign: 'center', fontSize: '0.8rem', fontWeight: 'bold'}}>📡 CONEXIÓN SATISFACTORIA CON LA CENTRAL</div>}
 
       {/* ── HEADER ── */}
       <header className="app-header no-print">
@@ -395,15 +380,15 @@ function App() {
           <h3>Ingresar al Sistema</h3>
           <form onSubmit={ejecutarLogin}>
             <div className="form-group">
-              <label>Correo central del grupo</label>
-              <input type="email" placeholder="ejemplo@correo.com" className="form-input" required value={email} onChange={e => setEmail(e.target.value)} />
+              <label>Correo electrónico registrado</label>
+              <input type="email" placeholder="alumno@correo.com" className="form-input" required value={email} onChange={e => setEmail(e.target.value)} />
             </div>
             <div className="form-group">
               <label>Contraseña (Cualquiera para desarrollo rápido)</label>
               <input type="password" placeholder="••••••••" className="form-input" value={password} onChange={e => setPassword(e.target.value)} />
             </div>
             <button type="submit" className="btn btn-primary" style={{ marginTop: '8px' }}>
-              Iniciar Sesión Sincronizada →
+              Iniciar Sesión Central →
             </button>
           </form>
           <p style={{ marginTop: '22px', textAlign: 'center', fontSize: '0.875rem', color: 'var(--slate-400)' }}>
@@ -416,7 +401,7 @@ function App() {
       {/* ── REGISTRO ── */}
       {vistaActual === 'registro' && (
         <div className="card no-print">
-          <h3>Registro del Alumno (Nube)</h3>
+          <h3>Registro del Alumno (Sincronizado)</h3>
           <form onSubmit={ejecutarRegistro}>
             <div className="flex-row">
               <div className="form-group" style={{ flex: 1 }}>
@@ -429,7 +414,7 @@ function App() {
               </div>
             </div>
             <div className="form-group">
-              <label>Matrícula / Boleta</label>
+              <label>Matrícula / Código</label>
               <input type="text" placeholder="A22030XXX" className="form-input" required value={matricula} onChange={e => setMatricula(e.target.value)} />
             </div>
             <div className="form-group">
@@ -437,7 +422,7 @@ function App() {
               <input type="email" placeholder="alumno@correo.com" className="form-input" required value={email} onChange={e => setEmail(e.target.value)} />
             </div>
             <button type="submit" className="btn btn-success" style={{ marginTop: '8px' }}>
-              Crear Cuenta Global →
+              Crear Cuenta Remota →
             </button>
           </form>
           <p style={{ marginTop: '22px', textAlign: 'center', fontSize: '0.875rem', color: 'var(--slate-400)' }}>
@@ -450,7 +435,7 @@ function App() {
       {/* ── PERFIL ── */}
       {vistaActual === 'perfil' && usuarioLogueado && (
         <div className="card no-print">
-          <h3>Mi Perfil Central</h3>
+          <h3>Mi Perfil Nube</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: '18px', marginBottom: '24px' }}>
             <div className="avatar">{getInitials(usuarioLogueado.nombre, usuarioLogueado.apellido)}</div>
             <div>
@@ -461,7 +446,7 @@ function App() {
           </div>
 
           <form onSubmit={actualizarMiPerfil} style={{ borderTop: '1px solid var(--slate-100)', paddingTop: '20px' }}>
-            <h4>Actualizar mis datos en el grupo</h4>
+            <h4>Actualizar mis datos generales</h4>
             <div className="flex-row">
               <div className="form-group" style={{ flex: 1 }}>
                 <label>Nombre</label>
@@ -477,7 +462,7 @@ function App() {
               <input type="text" className="form-input" value={editMatricula} onChange={e => setEditMatricula(e.target.value)} />
             </div>
             <button type="submit" className="btn btn-primary" style={{ marginTop: '8px' }}>
-              Actualizar Datos Remotos
+              Actualizar Datos Globales
             </button>
           </form>
         </div>
@@ -490,12 +475,12 @@ function App() {
           <h4>Crear un nuevo grupo de trabajo</h4>
           <form onSubmit={crearEquipo} style={{ marginBottom: '32px' }}>
             <div className="flex-row">
-              <input type="text" placeholder="Ej. Los Científicos del Código" className="form-input" required value={nombreNuevoEquipo} onChange={e => setNombreNuevoEquipo(e.target.value)} />
+              <input type="text" placeholder="Nombre del grupo..." className="form-input" required value={nombreNuevoEquipo} onChange={e => setNombreNuevoEquipo(e.target.value)} />
               <button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '0 24px' }}>Registrar</button>
             </div>
           </form>
 
-          <h4>Equipos registrados en la nube</h4>
+          <h4>Equipos registrados</h4>
           {listaEquipos.map(eq => (
             <div key={eq.id} className="team-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', borderBottom: '1px solid var(--slate-100)' }}>
               <div>
@@ -518,14 +503,14 @@ function App() {
       {/* ── CALIFICAR ── */}
       {vistaActual === 'evaluar' && (
         <div className="card no-print">
-          <h3>Coevaluación Colectiva</h3>
+          <h3>Coevaluación en Tiempo Real</h3>
           
           {usuarioLogueado?.rol !== 'admin' && (
             <form onSubmit={crearExposicion} style={{ marginBottom: '32px', padding: '16px', background: 'var(--slate-50)', borderRadius: '8px' }}>
               <h4>Dar de alta nuestra exposición</h4>
               <div className="form-group">
                 <label>Tema Expuesto</label>
-                <input type="text" placeholder="Ej. Introducción a GraphQL" className="form-input" required value={tituloNuevaExpo} onChange={e => setTituloNuevaExpo(e.target.value)} />
+                <input type="text" placeholder="Ej. Arquitectura limpia" className="form-input" required value={tituloNuevaExpo} onChange={e => setTituloNuevaExpo(e.target.value)} />
               </div>
               <div className="flex-row">
                 <div className="form-group" style={{ flex: 1 }}>
@@ -563,10 +548,10 @@ function App() {
                       onChange={e => handleScoreChange(expo.id, crit.id, parseFloat(e.target.value))} />
                   </div>
                 ))}
-                <textarea placeholder="Deja una crítica constructiva..." className="form-input" style={{ height: '50px', marginTop: '8px' }}
+                <textarea placeholder="Comentario constructivo..." className="form-input" style={{ height: '50px', marginTop: '8px' }}
                   value={comentariosInput[expo.id] || ''} onChange={e => handleCommentChange(expo.id, e.target.value)} />
                 <button className="btn btn-success" style={{ marginTop: '8px', fontSize: '0.85rem', padding: '6px 12px' }}
-                  onClick={() => enviarCalificacionReal(expo.id, expo.nombre_equipo, expo.titulo)}>Enviar Evaluación Global</button>
+                  onClick={() => enviarCalificacionReal(expo.id, expo.nombre_equipo, expo.titulo)}>Enviar Evaluación Central</button>
               </div>
             </div>
           ))}
@@ -576,7 +561,7 @@ function App() {
       {/* ── RESULTADOS ── */}
       {vistaActual === 'resultados' && (
         <div className="card">
-          <h3>Boleta de Resultados del Grupo</h3>
+          <h3>Resultados del Grupo</h3>
           
           {obtenerEquipoDelUsuario() && (
             <div style={{ background: 'var(--indigo-50)', padding: '16px', borderRadius: '8px', borderLeft: '5px solid var(--indigo-600)', marginBottom: '24px' }}>
@@ -599,9 +584,9 @@ function App() {
             </div>
           )}
 
-          <h4>Todas las Calificaciones Sincronizadas</h4>
+          <h4>Calificaciones Consolidadas</h4>
           {listaCalificaciones.length === 0 ? (
-            <p style={{ color: 'var(--slate-400)' }}>No hay rúbricas procesadas en el servidor remotos.</p>
+            <p style={{ color: 'var(--slate-400)' }}>No hay rúbricas procesadas en el servidor todavía.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {listaCalificaciones.map(c => (
@@ -622,7 +607,7 @@ function App() {
       {/* ── PANEL ADMIN ── */}
       {vistaActual === 'admin_panel' && usuarioLogueado?.rol === 'admin' && (
         <div className="card" style={{ maxWidth: '900px' }}>
-          <h3>Consola del Profesor / Administrador</h3>
+          <h3>Consola del Profesor</h3>
           
           <div style={{ background: 'var(--slate-50)', padding: '16px', borderRadius: '8px', marginBottom: '24px' }}>
             <h4>Registrar Exposición Manual</h4>
@@ -636,8 +621,8 @@ function App() {
             </div>
           </div>
 
-          <h4>Alumnos Inscritos en la Red Colectiva</h4>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', marginBottom: '30px' }}>
+          <h4>Alumnos Inscritos en la Red</h4>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
             <thead>
               <tr style={{ background: 'var(--slate-100)', textAlign: 'left' }}>
                 <th style={{ padding: '8px' }}>Nombre</th>
