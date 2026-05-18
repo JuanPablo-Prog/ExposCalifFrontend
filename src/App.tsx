@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useState, useEffect } from 'react';
-import { equiposSimulados, exposicionesSimuladas } from './datosSimulados';
+import { equiposSimulados, exposicionesSimuladas, API_BASE_URL } from './datosSimulados';
 import type { Usuario, Equipo, Exposicion } from './datosSimulados';
 import './App.css';
 
@@ -16,7 +16,13 @@ function App() {
   const [listaUsuarios, setListaUsuarios] = useState<Usuario[]>([]);
   const [listaEquipos, setListaEquipos] = useState<Equipo[]>([]);
   const [listaExposiciones, setListaExposiciones] = useState<Exposicion[]>([]);
-  const [listaCalificaciones, setListaCalificaciones] = useState<any[]>([]);
+  
+  // Historial global de calificaciones simuladas para poblar la interfaz
+  const [listaCalificaciones, setListaCalificaciones] = useState<any[]>([
+    { id: 1, evaluador: 'administrador@gmail.com', equipo: 'Los Analistas de Software', expo: 'Arquitectura REST y Node.js', nota: 9.5, comentario: 'Excelente dominio del tema, la explicación de los endpoints fue muy clara.' },
+    { id: 2, evaluador: 'Maria Lopez', equipo: 'Desarrolladores Alfa', expo: 'Modelado de Bases de Datos', nota: 8.8, comentario: 'Buen material visual, pero faltó profundizar un poco más en las llaves foráneas.' },
+    { id: 3, evaluador: 'Juan Pablo Prog', equipo: 'Desarrolladores Alfa', expo: 'Modelado de Bases de Datos', nota: 9.2, comentario: 'Excelente diseño de tablas y normalización.' }
+  ]);
 
   const [criterios] = useState<any[]>([
     { id: 1, nombre_criterio: 'Dominio del tema', peso: 40 },
@@ -49,53 +55,44 @@ function App() {
   const [calificacionesInput, setCalificacionesInput] = useState<{ [key: string]: { [critId: number]: number } }>({});
   const [comentariosInput, setComentariosInput] = useState<{ [key: string]: string }>({});
 
-  // --- CARGA DE DATOS LOCALES ---
   useEffect(() => {
-    // Inicializar usuarios si está vacío en localStorage
-    const usuariosGuardados = localStorage.getItem('usuarios_local');
-    if (usuariosGuardados) {
-      setListaUsuarios(JSON.parse(usuariosGuardados));
-    } else {
-      const adminInicial = [
-        {
-          id: 'admin-1',
-          email: 'administrador@gmail.com',
-          nombre: 'Emilio',
-          apellido: 'Biches',
-          rol: 'admin',
-          matricula: 'DOC-001'
-        }
-      ];
-      setListaUsuarios(adminInicial);
-      localStorage.setItem('usuarios_local', JSON.stringify(adminInicial));
-    }
+    const users = localStorage.getItem('faked_usuarios');
+    let dbUsuarios = users ? JSON.parse(users) : [
+      {
+        id: 'c21aa13c-83c2-4423-9485-5a516b',
+        email: 'administrador@gmail.com',
+        nombre: 'Emilio',
+        apellido: 'Biches',
+        rol: 'admin',
+        matricula: 'DOC-001',
+        password: 'admin'
+      }
+    ];
+    setListaUsuarios(dbUsuarios);
+    if (!users) localStorage.setItem('faked_usuarios', JSON.stringify(dbUsuarios));
 
-    // Inicializar equipos
-    const equiposGuardados = localStorage.getItem('equipos_local');
-    if (equiposGuardados) {
-      setListaEquipos(JSON.parse(equiposGuardados));
-    } else {
+    if (!localStorage.getItem('faked_equipos')) {
+      localStorage.setItem('faked_equipos', JSON.stringify(equiposSimulados));
       setListaEquipos(equiposSimulados);
-      localStorage.setItem('equipos_local', JSON.stringify(equiposSimulados));
-    }
-
-    // Inicializar exposiciones
-    const exposicionesGuardadas = localStorage.getItem('exposiciones_local');
-    if (exposicionesGuardadas) {
-      setListaExposiciones(JSON.parse(exposicionesGuardadas));
     } else {
+      setListaEquipos(JSON.parse(localStorage.getItem('faked_equipos')!));
+    }
+
+    if (!localStorage.getItem('faked_exposiciones')) {
+      localStorage.setItem('faked_exposiciones', JSON.stringify(exposicionesSimuladas));
       setListaExposiciones(exposicionesSimuladas);
-      localStorage.setItem('exposiciones_local', JSON.stringify(exposicionesSimuladas));
+    } else {
+      setListaExposiciones(JSON.parse(localStorage.getItem('faked_exposiciones')!));
     }
 
-    // Inicializar calificaciones
-    const califsGuardadas = localStorage.getItem('calificaciones_local');
-    if (califsGuardadas) {
-      setListaCalificaciones(JSON.parse(califsGuardadas));
+    const hCalif = localStorage.getItem('faked_calificaciones');
+    if (hCalif) {
+      setListaCalificaciones(JSON.parse(hCalif));
+    } else {
+      localStorage.setItem('faked_calificaciones', JSON.stringify(listaCalificaciones));
     }
 
-    // Recordar sesión del usuario actual
-    const sesionActiva = localStorage.getItem('sesion_activa');
+    const sesionActiva = localStorage.getItem('faked_sesion_activa');
     if (sesionActiva) {
       const user = JSON.parse(sesionActiva);
       setUsuarioLogueado(user);
@@ -106,13 +103,24 @@ function App() {
     }
   }, []);
 
-  // --- ACCIONES ---
+  // --- MANEJADORES ---
+  const handleScoreChange = (expoId: number, critId: number, valor: number) => {
+    setCalificacionesInput(prev => ({
+      ...prev,
+      [expoId]: { ...(prev[expoId] || {}), [critId]: valor }
+    }));
+  };
+
+  const handleCommentChange = (expoId: number, valor: string) => {
+    setComentariosInput(prev => ({ ...prev, [expoId]: valor }));
+  };
+
   const ejecutarLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    const usuarioEncontrado = listaUsuarios.find(u => u.email.trim().toLowerCase() === email.trim().toLowerCase());
+    const usuarioEncontrado = listaUsuarios.find(u => u.email === email && (u as any).password === password);
 
     if (usuarioEncontrado) {
-      localStorage.setItem('sesion_activa', JSON.stringify(usuarioEncontrado));
+      localStorage.setItem('faked_sesion_activa', JSON.stringify(usuarioEncontrado));
       setUsuarioLogueado(usuarioEncontrado);
       setEditNombre(usuarioEncontrado.nombre);
       setEditApellido(usuarioEncontrado.apellido);
@@ -121,14 +129,18 @@ function App() {
       setEmail('');
       setPassword('');
     } else {
-      alert('Error: Este correo electrónico no se encuentra registrado en el sistema local.');
+      alert('Error de autenticación: Credenciales inválidas.');
     }
   };
 
   const ejecutarRegistro = (e: React.FormEvent) => {
     e.preventDefault();
-    if (listaUsuarios.some(u => u.email.toLowerCase() === email.toLowerCase())) {
-      alert('Esta cuenta de correo electrónico ya está registrada.');
+    if (password.length < 6) {
+      alert('La contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+    if (listaUsuarios.some(u => u.email === email)) {
+      alert('Este correo electrónico ya está registrado.');
       return;
     }
 
@@ -138,14 +150,15 @@ function App() {
       nombre,
       apellido,
       email,
-      rol: email.toLowerCase() === 'administrador@gmail.com' ? 'admin' : 'alumno'
+      rol: 'alumno'
     };
+    (nuevoUsuario as any).password = password;
 
     const nuevaLista = [...listaUsuarios, nuevoUsuario];
     setListaUsuarios(nuevaLista);
-    localStorage.setItem('usuarios_local', JSON.stringify(nuevaLista));
+    localStorage.setItem('faked_usuarios', JSON.stringify(nuevaLista));
 
-    alert('¡Registro exitoso! Ya puedes iniciar sesión con tus credenciales.');
+    alert('¡Cuenta registrada con éxito! Ya puedes ingresar.');
     setNombre(''); setApellido(''); setMatricula(''); setEmail(''); setPassword('');
     setVistaActual('login');
   };
@@ -154,15 +167,20 @@ function App() {
     e.preventDefault();
     if (!usuarioLogueado) return;
 
-    const usuarioActualizado = { ...usuarioLogueado, nombre: editNombre, apellido: editApellido, matricula: editMatricula };
+    const usuarioActualizado = {
+      ...usuarioLogueado,
+      nombre: editNombre,
+      apellido: editApellido,
+      matricula: editMatricula
+    };
+
     const nuevosUsuarios = listaUsuarios.map(u => u.id === usuarioLogueado.id ? usuarioActualizado : u);
-    
     setListaUsuarios(nuevosUsuarios);
+    localStorage.setItem('faked_usuarios', JSON.stringify(nuevosUsuarios));
+
     setUsuarioLogueado(usuarioActualizado);
-    localStorage.setItem('sesion_activa', JSON.stringify(usuarioActualizado));
-    localStorage.setItem('usuarios_local', JSON.stringify(nuevosUsuarios));
-    
-    alert('Tus datos de perfil han sido actualizados.');
+    localStorage.setItem('faked_sesion_activa', JSON.stringify(usuarioActualizado));
+    alert('Perfil actualizado correctamente.');
   };
 
   const crearEquipo = (e: React.FormEvent) => {
@@ -170,13 +188,24 @@ function App() {
     if (!nombreNuevoEquipo.trim()) return;
 
     const creador = usuarioLogueado ? `${usuarioLogueado.nombre} ${usuarioLogueado.apellido}` : 'Alumno';
-    const nuevoEq: Equipo = { id: Date.now(), nombre_equipo: nombreNuevoEquipo, miembros: [creador] };
+    const nuevoEq: Equipo = {
+      id: Date.now(),
+      nombre_equipo: nombreNuevoEquipo,
+      id_grupo: 1,
+      miembros: [creador]
+    };
 
     const nuevosEquipos = [...listaEquipos, nuevoEq];
     setListaEquipos(nuevosEquipos);
+    localStorage.setItem('faked_equipos', JSON.stringify(nuevosEquipos));
     setNombreNuevoEquipo('');
-    localStorage.setItem('equipos_local', JSON.stringify(nuevosEquipos));
-    alert(`Equipo "${nombreNuevoEquipo}" creado con éxito.`);
+    alert(`Equipo "${nombreNuevoEquipo}" creado.`);
+  };
+
+  const eliminarEquipo = (id: number) => {
+    const filtrados = listaEquipos.filter(eq => eq.id !== id);
+    setListaEquipos(filtrados);
+    localStorage.setItem('faked_equipos', JSON.stringify(filtrados));
   };
 
   const unirseAEquipo = (idEquipo: number) => {
@@ -194,27 +223,34 @@ function App() {
     });
 
     setListaEquipos(nuevosEquipos);
-    localStorage.setItem('equipos_local', JSON.stringify(nuevosEquipos));
+    localStorage.setItem('faked_equipos', JSON.stringify(nuevosEquipos));
     alert('Te has integrado al equipo.');
   };
 
   const crearExposicion = (e: React.FormEvent) => {
-    if (e) e.preventDefault();
+    e.preventDefault();
     if (!tituloNuevaExpo.trim() || !equipoNuevaExpo) return;
 
     const nuevaExpo: Exposicion = {
       id: Date.now(),
       titulo: tituloNuevaExpo,
       fecha_exposicion: fechaNuevaExpo || new Date().toISOString().split('T')[0],
-      nombre_equipo: equipoNuevaExpo
+      nombre_equipo: equipoNuevaExpo,
+      id_equipo: Date.now()
     };
 
     const nuevasExpos = [...listaExposiciones, nuevaExpo];
     setListaExposiciones(nuevasExpos);
+    localStorage.setItem('faked_exposiciones', JSON.stringify(nuevasExpos));
     setTituloNuevaExpo('');
     setFechaNuevaExpo('');
-    localStorage.setItem('exposiciones_local', JSON.stringify(nuevasExpos));
-    alert('Exposición programada.');
+    alert('Exposición programada con éxito.');
+  };
+
+  const eliminarExposicion = (id: number) => {
+    const filtrados = listaExposiciones.filter(ex => ex.id !== id);
+    setListaExposiciones(filtrados);
+    localStorage.setItem('faked_exposiciones', JSON.stringify(filtrados));
   };
 
   const enviarCalificacionReal = (idExposicion: number, nombreEquipo: string, tituloExpo: string) => {
@@ -234,35 +270,12 @@ function App() {
 
     const historial = [...listaCalificaciones, nuevaCalidad];
     setListaCalificaciones(historial);
-    localStorage.setItem('calificaciones_local', JSON.stringify(historial));
+    localStorage.setItem('faked_calificaciones', JSON.stringify(historial));
 
-    alert(`¡Evaluación guardada localmente! Promedio obtenido: ${promedio}`);
+    alert(`¡Evaluación registrada para "${nombreEquipo}"! Promedio final: ${promedio}`);
     
     setCalificacionesInput(prev => { const c = { ...prev }; delete c[idExposicion]; return c; });
     setComentariosInput(prev => { const c = { ...prev }; delete c[idExposicion]; return c; });
-  };
-
-  const handleScoreChange = (expoId: number, critId: number, valor: number) => {
-    setCalificacionesInput(prev => ({
-      ...prev,
-      [expoId]: { ...(prev[expoId] || {}), [critId]: valor }
-    }));
-  };
-
-  const handleCommentChange = (expoId: number, valor: string) => {
-    setComentariosInput(prev => ({ ...prev, [expoId]: valor }));
-  };
-
-  const eliminarEquipo = (id: number) => {
-    const filtrados = listaEquipos.filter(eq => eq.id !== id);
-    setListaEquipos(filtrados);
-    localStorage.setItem('equipos_local', JSON.stringify(filtrados));
-  };
-
-  const eliminarExposicion = (id: number) => {
-    const filtrados = listaExposiciones.filter(ex => ex.id !== id);
-    setListaExposiciones(filtrados);
-    localStorage.setItem('exposiciones_local', JSON.stringify(filtrados));
   };
 
   const iniciarEdicionUsuario = (u: Usuario) => {
@@ -274,26 +287,39 @@ function App() {
   };
 
   const guardarEdicionUsuario = (id: string) => {
-    const modificados = listaUsuarios.map(u => u.id === id ? { ...u, nombre: userFormNombre, apellido: userFormApellido, matricula: userFormMatricula, rol: userFormRol } : u);
+    const modificados = listaUsuarios.map(u => {
+      if (u.id === id) {
+        return { ...u, nombre: userFormNombre, apellido: userFormApellido, matricula: userFormMatricula, rol: userFormRol };
+      }
+      return u;
+    });
     setListaUsuarios(modificados);
+    localStorage.setItem('faked_usuarios', JSON.stringify(modificados));
     setUsuarioEditandoId(null);
-    localStorage.setItem('usuarios_local', JSON.stringify(modificados));
-    alert('Cambios guardados en el usuario.');
+    alert('Usuario modificado por el administrador.');
   };
 
   const eliminarUsuario = (id: string) => {
-    if (id === 'admin-1') return;
+    if (id === 'c21aa13c-83c2-4423-9485-5a516b') {
+      alert('No puedes eliminar al administrador del sistema.');
+      return;
+    }
     const filtrados = listaUsuarios.filter(u => u.id !== id);
     setListaUsuarios(filtrados);
-    localStorage.setItem('usuarios_local', JSON.stringify(filtrados));
+    localStorage.setItem('faked_usuarios', JSON.stringify(filtrados));
+  };
+
+  const descargarReportePDF = () => {
+    window.print();
   };
 
   const ejecutarLogout = () => {
-    localStorage.removeItem('sesion_activa');
+    localStorage.removeItem('faked_sesion_activa');
     setUsuarioLogueado(null);
     setVistaActual('login');
   };
 
+  // Saber a qué equipo pertenece el alumno logueado actualmente
   const obtenerEquipoDelUsuario = () => {
     if (!usuarioLogueado) return "";
     const miNombreCompleto = `${usuarioLogueado.nombre} ${usuarioLogueado.apellido}`;
@@ -303,6 +329,7 @@ function App() {
 
   return (
     <div className="app-container">
+
       {/* ── HEADER ── */}
       <header className="app-header no-print">
         <h2 className="app-title">ExposCalif</h2>
@@ -323,22 +350,22 @@ function App() {
       {/* ── LOGIN ── */}
       {vistaActual === 'login' && (
         <div className="card no-print">
-          <h3>Ingresar al Sistema</h3>
+          <h3>Bienvenido</h3>
           <form onSubmit={ejecutarLogin}>
             <div className="form-group">
-              <label htmlFor="user-email">Correo electrónico registrado</label>
-              <input id="user-email" type="email" autocomplete="username" placeholder="alumno@correo.com" className="form-input" required value={email} onChange={e => setEmail(e.target.value)} />
+              <label>Correo electrónico</label>
+              <input type="email" placeholder="ejemplo@correo.com" className="form-input" required value={email} onChange={e => setEmail(e.target.value)} />
             </div>
             <div className="form-group">
-              <label htmlFor="user-password">Contraseña</label>
-              <input id="user-password" type="password" autocomplete="current-password" placeholder="••••••••" className="form-input" required value={password} onChange={e => setPassword(e.target.value)} />
+              <label>Contraseña</label>
+              <input type="password" placeholder="••••••••" className="form-input" required value={password} onChange={e => setPassword(e.target.value)} />
             </div>
             <button type="submit" className="btn btn-primary" style={{ marginTop: '8px' }}>
-              Iniciar Sesión Local
+              Ingresar al sistema →
             </button>
           </form>
           <p style={{ marginTop: '22px', textAlign: 'center', fontSize: '0.875rem', color: 'var(--slate-400)' }}>
-            ¿Eres nuevo en la clase?{' '}
+            ¿No tienes cuenta?{' '}
             <a href="#" onClick={e => { e.preventDefault(); setVistaActual('registro'); }}>Regístrate aquí</a>
           </p>
         </div>
@@ -347,32 +374,36 @@ function App() {
       {/* ── REGISTRO ── */}
       {vistaActual === 'registro' && (
         <div className="card no-print">
-          <h3>Registro del Alumno</h3>
+          <h3>Crear cuenta</h3>
           <form onSubmit={ejecutarRegistro}>
             <div className="flex-row">
               <div className="form-group" style={{ flex: 1 }}>
-                <label htmlFor="reg-name">Nombre(s)</label>
-                <input id="reg-name" type="text" placeholder="Tu nombre" className="form-input" required value={nombre} onChange={e => setNombre(e.target.value)} />
+                <label>Nombre(s)</label>
+                <input type="text" placeholder="Tu nombre" className="form-input" required value={nombre} onChange={e => setNombre(e.target.value)} />
               </div>
               <div className="form-group" style={{ flex: 1 }}>
-                <label htmlFor="reg-last">Apellido(s)</label>
-                <input id="reg-last" type="text" placeholder="Tus apellidos" className="form-input" required value={apellido} onChange={e => setApellido(e.target.value)} />
+                <label>Apellido(s)</label>
+                <input type="text" placeholder="Tus apellidos" className="form-input" required value={apellido} onChange={e => setApellido(e.target.value)} />
               </div>
             </div>
             <div className="form-group">
-              <label htmlFor="reg-mat">Matrícula / Código</label>
-              <input id="reg-mat" type="text" placeholder="A22030XXX" className="form-input" required value={matricula} onChange={e => setMatricula(e.target.value)} />
+              <label>Matrícula</label>
+              <input type="text" placeholder="A22030XXX" className="form-input" required value={matricula} onChange={e => setMatricula(e.target.value)} />
             </div>
             <div className="form-group">
-              <label htmlFor="reg-email">Correo Electrónico</label>
-              <input id="reg-email" type="email" autocomplete="username" placeholder="alumno@correo.com" className="form-input" required value={email} onChange={e => setEmail(e.target.value)} />
+              <label>Correo institucional</label>
+              <input type="email" placeholder="alumno@correo.com" className="form-input" required value={email} onChange={e => setEmail(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Contraseña</label>
+              <input type="password" placeholder="Mínimo 6 caracteres" className="form-input" required value={password} onChange={e => setPassword(e.target.value)} />
             </div>
             <button type="submit" className="btn btn-success" style={{ marginTop: '8px' }}>
-              Crear Cuenta Local
+              Completar registro →
             </button>
           </form>
           <p style={{ marginTop: '22px', textAlign: 'center', fontSize: '0.875rem', color: 'var(--slate-400)' }}>
-            ¿Ya te habías registrado?{' '}
+            ¿Ya tienes cuenta?{' '}
             <a href="#" onClick={e => { e.preventDefault(); setVistaActual('login'); }}>Inicia sesión</a>
           </p>
         </div>
@@ -381,7 +412,7 @@ function App() {
       {/* ── PERFIL ── */}
       {vistaActual === 'perfil' && usuarioLogueado && (
         <div className="card no-print">
-          <h3>Mi Perfil</h3>
+          <h3>Mi perfil</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: '18px', marginBottom: '24px' }}>
             <div className="avatar">{getInitials(usuarioLogueado.nombre, usuarioLogueado.apellido)}</div>
             <div>
@@ -392,7 +423,7 @@ function App() {
           </div>
 
           <form onSubmit={actualizarMiPerfil} style={{ borderTop: '1px solid var(--slate-100)', paddingTop: '20px' }}>
-            <h4>Actualizar mis datos generales</h4>
+            <h4>Modificar mis datos personales</h4>
             <div className="flex-row">
               <div className="form-group" style={{ flex: 1 }}>
                 <label>Nombre</label>
@@ -404,11 +435,11 @@ function App() {
               </div>
             </div>
             <div className="form-group">
-              <label>Matrícula</label>
+              <label>Matrícula / Código</label>
               <input type="text" className="form-input" value={editMatricula} onChange={e => setEditMatricula(e.target.value)} />
             </div>
             <button type="submit" className="btn btn-primary" style={{ marginTop: '8px' }}>
-              Guardar Cambios Locales
+              Guardar Cambios de Perfil
             </button>
           </form>
         </div>
@@ -417,22 +448,22 @@ function App() {
       {/* ── EQUIPOS ── */}
       {vistaActual === 'equipos' && (
         <div className="card no-print">
-          <h3>Equipos de Trabajo</h3>
-          <h4>Crear un nuevo grupo</h4>
+          <h3>Gestión de Equipos</h3>
+          <h4>Registrar nuevo equipo</h4>
           <form onSubmit={crearEquipo} style={{ marginBottom: '32px' }}>
             <div className="flex-row">
-              <input type="text" placeholder="Nombre del grupo..." className="form-input" required value={nombreNuevoEquipo} onChange={e => setNombreNuevoEquipo(e.target.value)} />
-              <button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '0 24px' }}>Registrar</button>
+              <input type="text" placeholder="Nombre del equipo..." className="form-input" required value={nombreNuevoEquipo} onChange={e => setNombreNuevoEquipo(e.target.value)} />
+              <button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '0 24px' }}>Crear</button>
             </div>
           </form>
 
-          <h4>Equipos registrados</h4>
+          <h4>Lista de equipos en el curso</h4>
           {listaEquipos.map(eq => (
             <div key={eq.id} className="team-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', borderBottom: '1px solid var(--slate-100)' }}>
               <div>
                 <p className="team-name" style={{ margin: 0, fontWeight: 'bold' }}>{eq.nombre_equipo}</p>
                 <p className="team-members" style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'var(--slate-400)' }}>
-                  Miembros: {eq.miembros?.join(', ') || 'Sin integrantes'}
+                  Integrantes: {eq.miembros?.join(', ') || 'Ninguno'}
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -446,23 +477,23 @@ function App() {
         </div>
       )}
 
-      {/* ── CALIFICAR ── */}
+      {/* ── CALIFICAR EXPOSICIONES ── */}
       {vistaActual === 'evaluar' && (
         <div className="card no-print">
-          <h3>Rúbricas de Coevaluación</h3>
+          <h3>Evaluar Exposiciones</h3>
           
           {usuarioLogueado?.rol !== 'admin' && (
             <form onSubmit={crearExposicion} style={{ marginBottom: '32px', padding: '16px', background: 'var(--slate-50)', borderRadius: '8px' }}>
-              <h4>Dar de alta nuestra exposición</h4>
+              <h4>Agendar nueva exposición propia</h4>
               <div className="form-group">
-                <label>Tema Expuesto</label>
-                <input type="text" placeholder="Ej. Arquitectura limpia" className="form-input" required value={tituloNuevaExpo} onChange={e => setTituloNuevaExpo(e.target.value)} />
+                <label>Tema o Título</label>
+                <input type="text" placeholder="Ej. Microservicios con Docker" className="form-input" required value={tituloNuevaExpo} onChange={e => setTituloNuevaExpo(e.target.value)} />
               </div>
               <div className="flex-row">
                 <div className="form-group" style={{ flex: 1 }}>
                   <label>Equipo Responsable</label>
                   <select className="form-input" required value={equipoNuevaExpo} onChange={e => setEquipoNuevaExpo(e.target.value)}>
-                    <option value="">Selecciona tu equipo...</option>
+                    <option value="">Selecciona equipo...</option>
                     {listaEquipos.map(e => <option key={e.id} value={e.nombre_equipo}>{e.nombre_equipo}</option>)}
                   </select>
                 </div>
@@ -471,20 +502,20 @@ function App() {
                   <input type="date" className="form-input" value={fechaNuevaExpo} onChange={e => setFechaNuevaExpo(e.target.value)} />
                 </div>
               </div>
-              <button type="submit" className="btn btn-success">Publicar Tema</button>
+              <button type="submit" className="btn btn-success">Publicar Exposición</button>
             </form>
           )}
 
-          <h4>Temas por calificar</h4>
+          <h4>Exposiciones disponibles para rúbrica</h4>
           {listaExposiciones.map(expo => (
             <div key={expo.id} className="expo-card" style={{ background: '#fff', border: '1px solid var(--slate-200)', borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <strong>{expo.titulo}</strong>
                 {usuarioLogueado?.rol === 'admin' && (
-                  <button onClick={() => eliminarExposicion(expo.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>❌ Borrar</button>
+                  <button onClick={() => eliminarExposicion(expo.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.85rem' }}>❌ Quitar</button>
                 )}
               </div>
-              <p style={{ fontSize: '0.85rem', color: 'var(--slate-400)', margin: '4px 0' }}>Expone: {expo.nombre_equipo}</p>
+              <p style={{ fontSize: '0.85rem', color: 'var(--slate-400)', margin: '4px 0' }}>Equipo: {expo.nombre_equipo} | Fecha: {expo.fecha_exposicion}</p>
               
               <div className="rubric-container" style={{ marginTop: '12px', background: 'var(--slate-50)', padding: '12px', borderRadius: '6px' }}>
                 {criterios.map(crit => (
@@ -494,26 +525,30 @@ function App() {
                       onChange={e => handleScoreChange(expo.id, crit.id, parseFloat(e.target.value))} />
                   </div>
                 ))}
-                <textarea placeholder="Comentario opcional..." className="form-input" style={{ height: '50px', marginTop: '8px' }}
+                <textarea placeholder="Comentario cualitativo opcional..." className="form-input" style={{ height: '50px', marginTop: '8px' }}
                   value={comentariosInput[expo.id] || ''} onChange={e => handleCommentChange(expo.id, e.target.value)} />
                 <button className="btn btn-success" style={{ marginTop: '8px', fontSize: '0.85rem', padding: '6px 12px' }}
-                  onClick={() => enviarCalificacionReal(expo.id, expo.nombre_equipo, expo.titulo)}>Guardar Evaluación</button>
+                  onClick={() => enviarCalificacionReal(expo.id, expo.nombre_equipo, expo.titulo)}>Enviar Rúbrica</button>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* ── RESULTADOS ── */}
+      {/* ── PESTAÑA DE RESULTADOS (VISTA PARA ALUMNOS Y TODOS) ── */}
       {vistaActual === 'resultados' && (
         <div className="card">
-          <h3>Historial de Resultados</h3>
-          
+          <h3>Resultados de Evaluaciones</h3>
+          <p style={{ color: 'var(--slate-400)', marginTop: '-12px', marginBottom: '24px', fontSize: '0.9rem' }}>
+            Aquí puedes ver el desglose de puntajes y comentarios emitidos en la plataforma.
+          </p>
+
+          {/* Bloque Destacado: Calificaciones de MI EQUIPO */}
           {obtenerEquipoDelUsuario() && (
             <div style={{ background: 'var(--indigo-50)', padding: '16px', borderRadius: '8px', borderLeft: '5px solid var(--indigo-600)', marginBottom: '24px' }}>
               <h4 style={{ color: 'var(--indigo-800)', margin: '0 0 10px 0' }}>⭐ Mi Equipo: {obtenerEquipoDelUsuario()}</h4>
               {listaCalificaciones.filter(c => c.equipo === obtenerEquipoDelUsuario()).length === 0 ? (
-                <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--slate-500)' }}>Ningún compañero ha evaluado a tu equipo todavía.</p>
+                <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--slate-500)' }}>Tu equipo aún no tiene retroalimentaciones registradas.</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {listaCalificaciones.filter(c => c.equipo === obtenerEquipoDelUsuario()).map(c => (
@@ -530,19 +565,20 @@ function App() {
             </div>
           )}
 
-          <h4>Todas las Calificaciones Registradas</h4>
+          {/* Historial General del resto de la clase */}
+          <h4>Calificaciones Generales de la Clase</h4>
           {listaCalificaciones.length === 0 ? (
-            <p style={{ color: 'var(--slate-400)' }}>No se han procesado calificaciones en este dispositivo todavía.</p>
+            <p style={{ color: 'var(--slate-400)' }}>No hay calificaciones registradas todavía.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {listaCalificaciones.map(c => (
                 <div key={c.id} style={{ border: '1px solid var(--slate-200)', padding: '14px', borderRadius: '6px', background: '#fff' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <strong style={{ fontSize: '0.95rem', color: 'var(--slate-800)' }}>🎯 {c.equipo} — {c.expo}</strong>
-                    <span style={{ fontWeight: 'bold', color: 'var(--slate-700)', background: 'var(--slate-100)', padding: '2px 8px', borderRadius: '4px' }}>{c.nota}</span>
+                    <strong style={{ fontSize: '0.95rem', color: 'var(--slate-800)' }}>🎯 Equipo: {c.equipo} — {c.expo}</strong>
+                    <span style={{ fontWeight: 'bold', color: 'var(--slate-700)', background: 'var(--slate-100)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.9rem' }}>Puntaje: {c.nota}</span>
                   </div>
                   <p style={{ margin: '6px 0 0', fontSize: '0.85rem', color: 'var(--slate-600)' }}>💬 {c.comentario}</p>
-                  <small style={{ color: 'var(--slate-400)', display: 'block', marginTop: '4px' }}>Evaluador: {c.evaluador}</small>
+                  <small style={{ color: 'var(--slate-400)', display: 'block', marginTop: '4px' }}>Evaluado por: {c.evaluador}</small>
                 </div>
               ))}
             </div>
@@ -550,66 +586,105 @@ function App() {
         </div>
       )}
 
-      {/* ── PANEL ADMIN ── */}
+      {/* ── PANEL DE ADMINISTRADOR ── */}
       {vistaActual === 'admin_panel' && usuarioLogueado?.rol === 'admin' && (
         <div className="card" style={{ maxWidth: '900px' }}>
-          <h3>Panel de Administración</h3>
           
-          <div style={{ background: 'var(--slate-50)', padding: '16px', borderRadius: '8px', marginBottom: '24px' }}>
-            <h4>Registrar Exposición Manual</h4>
+          <div className="only-print" style={{ marginBottom: '30px', borderBottom: '3px solid #4f46e5', paddingBottom: '10px' }}>
+            <h1 style={{ color: '#4f46e5', margin: '0 0 4px 0' }}>ExposCalif — Reporte Institucional</h1>
+            <p style={{ margin: 0, color: '#64748b', fontSize: '0.95rem' }}>Historial ejecutivo de evaluaciones consolidadas del grupo.</p>
+            <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#94a3b8' }}>Generado por Administrador: {usuarioLogueado.nombre} {usuarioLogueado.apellido} en fecha: {new Date().toLocaleDateString()}</p>
+          </div>
+
+          <div className="flex-row no-print" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h3>Panel de Control del Administrador</h3>
+            <button className="btn btn-primary" style={{ width: 'auto', background: 'var(--indigo-600)' }} onClick={descargarReportePDF}>📑 Exportar a PDF</button>
+          </div>
+
+          <div className="no-print" style={{ background: 'var(--slate-50)', padding: '16px', borderRadius: '8px', marginBottom: '24px' }}>
+            <h4>Programación Directa de Exposiciones</h4>
             <div className="flex-row">
-              <input type="text" placeholder="Tema..." className="form-input" value={tituloNuevaExpo} onChange={e => setTituloNuevaExpo(e.target.value)} />
+              <input type="text" placeholder="Título de exposición..." className="form-input" value={tituloNuevaExpo} onChange={e => setTituloNuevaExpo(e.target.value)} />
               <select className="form-input" value={equipoNuevaExpo} onChange={e => setEquipoNuevaExpo(e.target.value)}>
-                <option value="">Selecciona Equipo...</option>
+                <option value="">Seleccionar Equipo...</option>
                 {listaEquipos.map(e => <option key={e.id} value={e.nombre_equipo}>{e.nombre_equipo}</option>)}
               </select>
-              <button className="btn btn-success" style={{ width: 'auto' }} onClick={crearExposicion}>Dar de Alta</button>
+              <button className="btn btn-success" style={{ width: 'auto' }} onClick={crearExposicion}>Agregar</button>
             </div>
           </div>
 
-          <h4>Alumnos Registrados en este Dispositivo</h4>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-            <thead>
-              <tr style={{ background: 'var(--slate-100)', textAlign: 'left' }}>
-                <th style={{ padding: '8px' }}>Nombre</th>
-                <th style={{ padding: '8px' }}>Correo</th>
-                <th style={{ padding: '8px' }}>Rol</th>
-                <th style={{ padding: '8px' }}>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {listaUsuarios.map(u => (
-                <tr key={u.id} style={{ borderBottom: '1px solid var(--slate-100)' }}>
-                  <td style={{ padding: '8px' }}>
-                    {usuarioEditandoId === u.id ? (
-                      <input type="text" value={userFormNombre} onChange={e => setUserFormNombre(e.target.value)} />
-                    ) : `${u.nombre} ${u.apellido}`}
-                  </td>
-                  <td style={{ padding: '8px' }}>{u.email}</td>
-                  <td style={{ padding: '8px' }}>
-                    {usuarioEditandoId === u.id ? (
-                      <select value={userFormRol} onChange={e => setUserFormRol(e.target.value as any)}>
-                        <option value="alumno">Alumno</option>
-                        <option value="admin">Admin</option>
-                      </select>
-                    ) : u.rol}
-                  </td>
-                  <td style={{ padding: '8px' }}>
-                    {usuarioEditandoId === u.id ? (
-                      <button onClick={() => guardarEdicionUsuario(u.id)}>OK</button>
-                    ) : (
-                      <>
-                        <button onClick={() => iniciarEdicionUsuario(u)} style={{ marginRight: '6px' }}>Editar</button>
-                        <button onClick={() => eliminarUsuario(u.id)} style={{ color: '#ef4444' }}>Eliminar</button>
-                      </>
-                    )}
-                  </td>
+          <h4 className="no-print">Control de Usuarios Registrados</h4>
+          <div className="no-print" style={{ overflowX: 'auto', marginBottom: '32px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+              <thead>
+                <tr style={{ background: 'var(--slate-100)', borderBottom: '2px solid var(--slate-200)' }}>
+                  <th style={{ padding: '8px' }}>Usuario</th>
+                  <th style={{ padding: '8px' }}>Correo</th>
+                  <th style={{ padding: '8px' }}>Matrícula</th>
+                  <th style={{ padding: '8px' }}>Rol</th>
+                  <th style={{ padding: '8px' }}>Acciones</th>
                 </tr>
+              </thead>
+              <tbody>
+                {listaUsuarios.map(u => (
+                  <tr key={u.id} style={{ borderBottom: '1px solid var(--slate-100)' }}>
+                    <td style={{ padding: '8px' }}>
+                      {usuarioEditandoId === u.id ? (
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <input type="text" style={{ width: '70px' }} value={userFormNombre} onChange={e => setUserFormNombre(e.target.value)} />
+                          <input type="text" style={{ width: '70px' }} value={userFormApellido} onChange={e => setUserFormApellido(e.target.value)} />
+                        </div>
+                      ) : `${u.nombre} ${u.apellido}`}
+                    </td>
+                    <td style={{ padding: '8px' }}>{u.email}</td>
+                    <td style={{ padding: '8px' }}>
+                      {usuarioEditandoId === u.id ? (
+                        <input type="text" style={{ width: '90px' }} value={userFormMatricula} onChange={e => setUserFormMatricula(e.target.value)} />
+                      ) : u.matricula}
+                    </td>
+                    <td style={{ padding: '8px' }}>
+                      {usuarioEditandoId === u.id ? (
+                        <select value={userFormRol} onChange={e => setUserFormRol(e.target.value as any)}>
+                          <option value="alumno">Alumno</option>
+                          <option value="docente">Docente</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      ) : <span className={`badge badge-${u.rol}`}>{u.rol}</span>}
+                    </td>
+                    <td style={{ padding: '8px' }}>
+                      {usuarioEditandoId === u.id ? (
+                        <button className="btn btn-success" style={{ padding: '2px 8px', fontSize: '0.75rem', width: 'auto' }} onClick={() => guardarEdicionUsuario(u.id)}>OK</button>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button className="btn btn-secondary" style={{ padding: '2px 6px', fontSize: '0.75rem', width: 'auto' }} onClick={() => iniciarEdicionUsuario(u)}>Editar</button>
+                          <button className="btn btn-danger" style={{ padding: '2px 6px', fontSize: '0.75rem', width: 'auto', background: '#fee2e2', color: '#ef4444' }} onClick={() => eliminarUsuario(u.id)}>Borrar</button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <h4>Historial Global de Calificaciones Emitidas</h4>
+          {listaCalificaciones.length === 0 ? <p style={{ color: 'var(--slate-400)' }}>Nadie ha evaluado aún.</p> : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {listaCalificaciones.map(c => (
+                <div key={c.id} style={{ border: '1px solid var(--slate-200)', padding: '14px', borderRadius: '6px', background: '#fff', pageBreakInside: 'avoid' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <strong style={{ fontSize: '1rem', color: '#1e293b' }}>🎯 Equipo: {c.equipo} — {c.expo}</strong>
+                    <span style={{ fontWeight: 'bold', color: '#4f46e5', background: '#f5f3ff', padding: '4px 10px', borderRadius: '4px', fontSize: '0.95rem' }}>Puntaje: {c.nota}</span>
+                  </div>
+                  <p style={{ margin: '6px 0 0', fontSize: '0.9rem', color: '#475569', fontStyle: 'italic' }}>💬 {c.comentario}</p>
+                  <small style={{ color: '#94a3b8', display: 'block', marginTop: '6px' }}>Emitido por: {c.evaluador}</small>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          )}
         </div>
       )}
+
     </div>
   );
 }
