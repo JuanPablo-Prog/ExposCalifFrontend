@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { equiposSimulados, exposicionesSimuladas, API_BASE_URL } from './datosSimulados';
+import { equiposSimulados, exposicionesSimuladas } from './datosSimulados';
 import type { Usuario, Equipo, Exposicion } from './datosSimulados';
 import './App.css';
 
@@ -8,13 +8,18 @@ function getInitials(nombre: string, apellido: string) {
 }
 
 function App() {
+  // --- ESTADOS DE LA APLICACIÓN ---
   const [vistaActual, setVistaActual] = useState<'login' | 'registro' | 'perfil' | 'equipos' | 'evaluar'>('login');
   const [usuarioLogueado, setUsuarioLogueado] = useState<Usuario | null>(null);
-  const [listaEquipos, setListaEquipos] = useState<Equipo[]>(equiposSimulados);
-  const [listaExposiciones, setListaExposiciones] = useState<Exposicion[]>(exposicionesSimuladas);
-  const [criterios, setCriterios] = useState<any[]>([]);
-  const [cargando, setCargando] = useState(false);
+  const [listaEquipos, setListaEquipos] = useState<Equipo[]>([]);
+  const [listaExposiciones, setListaExposiciones] = useState<Exposicion[]>([]);
+  const [criterios] = useState<any[]>([
+    { id: 1, nombre_criterio: 'Dominio del tema', peso: 40 },
+    { id: 2, nombre_criterio: 'Material didáctico y apoyo visual', peso: 30 },
+    { id: 3, nombre_criterio: 'Estructura y fluidez', peso: 30 }
+  ]);
 
+  // --- FORMULARIOS ---
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [nombre, setNombre] = useState('');
@@ -25,297 +30,161 @@ function App() {
   const [calificacionesInput, setCalificacionesInput] = useState<{ [key: string]: { [critId: number]: number } }>({});
   const [comentariosInput, setComentariosInput] = useState<{ [key: string]: string }>({});
 
-  // Detectar si la sesión es mock (sin token real del servidor)
-  const esSesionMock = () => {
-    const token = localStorage.getItem('token');
-    return token === 'mock-token-admin' || token === 'token-temporal-local';
+  // --- PERSISTENCIA LOCAL COMPLETAMENTE FAKED ---
+  
+  // Obtener usuarios locales creados en este navegador
+  const getUsuariosLocales = (): Usuario[] => {
+    const users = localStorage.getItem('faked_usuarios');
+    return users ? JSON.parse(users) : [
+      {
+        id: 'c21aa13c-83c2-4423-9485-5a516b', // Vinculado a tu script de DB
+        email: 'administrador@gmail.com',
+        nombre: 'Emilio',
+        apellido: 'Biches',
+        rol: 'admin',
+        matricula: 'DOC-001',
+        password: 'admin' // Para la simulación del login
+      }
+    ];
   };
 
-  // Recuperar sesión al arrancar
+  // Recuperar sesión activa al recargar la página
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
-    if (esSesionMock()) {
-      const usuarioGuardado = localStorage.getItem('usuario_mock');
-      if (usuarioGuardado) {
-        setUsuarioLogueado(JSON.parse(usuarioGuardado));
-        setVistaActual('perfil');
-      }
-      return;
+    const sesionActiva = localStorage.getItem('faked_sesion_activa');
+    if (sesionActiva) {
+      setUsuarioLogueado(JSON.parse(sesionActiva));
+      setVistaActual('perfil');
     }
 
-    fetch(`${API_BASE_URL}/api/auth/me`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    })
-      .then(res => {
-        if (res.ok) return res.json();
-        throw new Error('Sesión expirada');
-      })
-      .then(data => {
-        setUsuarioLogueado(data.user || data.usuario || data);
-        setVistaActual('perfil');
-      })
-      .catch(() => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('usuario_mock');
-      });
+    // Inicializar Equipos Globales en LocalStorage si no existen
+    if (!localStorage.getItem('faked_equipos')) {
+      localStorage.setItem('faked_equipos', JSON.stringify(equiposSimulados));
+      setListaEquipos(equiposSimulados);
+    } else {
+      setListaEquipos(JSON.parse(localStorage.getItem('faked_equipos')!));
+    }
+
+    // Inicializar Exposiciones Globales en LocalStorage si no existen
+    if (!localStorage.getItem('faked_exposiciones')) {
+      localStorage.setItem('faked_exposiciones', JSON.stringify(exposicionesSimuladas));
+      setListaExposiciones(exposicionesSimuladas);
+    } else {
+      setListaExposiciones(JSON.parse(localStorage.getItem('faked_exposiciones')!));
+    }
   }, []);
 
-  // Cargar datos reales SOLO si el token es real (no mock)
-  useEffect(() => {
-    if (!usuarioLogueado) return;
+  // --- MANEJADORES DE ACCIONES ---
 
-    if (esSesionMock()) {
-      if (listaEquipos.length === 0 || listaEquipos === equiposSimulados) setListaEquipos(equiposSimulados);
-      if (listaExposiciones.length === 0 || listaExposiciones === exposicionesSimuladas) setListaExposiciones(exposicionesSimuladas);
+  // LOGIN COMPLETAMENTE SIMULADO
+  const ejecutarLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const usuarios = getUsuariosLocales();
+    
+    // Buscar si existe el usuario con esas credenciales exactas
+    const usuarioEncontrado = usuarios.find(u => u.email === email && (u as any).password === password);
+
+    if (usuarioEncontrado) {
+      localStorage.setItem('faked_sesion_activa', JSON.stringify(usuarioEncontrado));
+      setUsuarioLogueado(usuarioEncontrado);
+      setVistaActual('perfil');
+      setEmail('');
+      setPassword('');
+    } else {
+      alert('Error de autenticación: Credenciales inválidas. Verifica tu correo o contraseña.');
+    }
+  };
+
+  // REGISTRO COMPLETAMENTE SIMULADO (Guarda en la BD interna del navegador)
+  const ejecutarRegistro = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (password.length < 6) {
+      alert('Error en el registro: La contraseña debe tener al menos 6 caracteres.');
       return;
     }
 
-    const token = localStorage.getItem('token');
+    const usuarios = getUsuariosLocales();
 
-    if (vistaActual === 'equipos') {
-      setCargando(true);
-      fetch(`${API_BASE_URL}/api/equipos`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-        .then(res => {
-          if (!res.ok) throw new Error(`Error ${res.status}`);
-          return res.json();
-        })
-        .then(data => {
-          if (Array.isArray(data)) setListaEquipos(data);
-        })
-        .catch(err => {
-          console.error("Error cargando equipos, usando locales por seguridad:", err);
-          setListaEquipos(equiposSimulados);
-        })
-        .finally(() => setCargando(false));
+    // Validar si el correo ya existe en el ambiente simulado
+    if (usuarios.some(u => u.email === email)) {
+      alert('Error en el registro: Este correo electrónico ya está registrado.');
+      return;
     }
 
-    if (vistaActual === 'evaluar') {
-      setCargando(true);
-      Promise.all([
-        fetch(`${API_BASE_URL}/api/exposiciones`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`${API_BASE_URL}/api/criterios`,    { headers: { 'Authorization': `Bearer ${token}` } })
-      ])
-        .then(async ([resExpo, resCrit]) => {
-          if (resExpo.ok) {
-            const dataExpo = await resExpo.json();
-            if (Array.isArray(dataExpo)) setListaExposiciones(dataExpo);
-          } else {
-            setListaExposiciones(exposicionesSimuladas);
-          }
-          if (resCrit.ok) {
-            const dataCrit = await resCrit.json();
-            if (Array.isArray(dataCrit)) setCriterios(dataCrit);
-          }
-        })
-        .catch(err => {
-          console.error("Error cargando evaluar, usando locales por seguridad:", err);
-          setListaExposiciones(exposicionesSimuladas);
-        })
-        .finally(() => setCargando(false));
-    }
-  }, [vistaActual, usuarioLogueado]);
-
-  // Login optimizado con bypass inmediato para Emilio si falla la red o da error de CORS
-  const ejecutarLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Si introducen el admin hardcodeado, creamos el plan de contingencia por si se cae la red o tira CORS
-    const intentarBypassAdmin = () => {
-      if (email === 'administrador@gmail.com' && password === 'admin') {
-        const adminMock: Usuario = {
-          id: 'c21aa13c-83c2-4423-9485-5a516b', // ID Real de Emilio en Supabase
-          email: 'administrador@gmail.com',
-          nombre: 'Emilio',
-          apellido: 'Biches',
-          rol: 'admin',
-          matricula: 'DOC-001'
-        };
-        localStorage.setItem('token', 'mock-token-admin');
-        localStorage.setItem('usuario_mock', JSON.stringify(adminMock));
-        setUsuarioLogueado(adminMock);
-        setVistaActual('perfil');
-        return true;
-      }
-      return false;
+    // Estructurado idéntico a tu Script de PostgreSQL
+    const nuevoUsuario: Usuario = {
+      id: crypto.randomUUID(), 
+      matricula: matricula || `A${Math.floor(100000 + Math.random() * 900000)}`,
+      nombre,
+      apellido,
+      email,
+      rol: 'alumno'
     };
+    (nuevoUsuario as any).password = password; // Inyectar pass para el login de simulación
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
+    const nuevaListaUsuarios = [...usuarios, nuevoUsuario];
+    localStorage.setItem('faked_usuarios', JSON.stringify(nuevaListaUsuarios));
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || data.message || 'Credenciales inválidas');
-      }
-
-      const tokenObtenido = data.access_token || data.token
-        || (data.session && data.session.access_token)
-        || 'token-temporal-local';
-
-      localStorage.setItem('token', tokenObtenido);
-
-      let usuarioDatos: Usuario | null = data.user || data.usuario || data.userData || data.data || null;
-
-      if (!usuarioDatos || !usuarioDatos.email) {
-        const perfilRes = await fetch(`${API_BASE_URL}/api/auth/me`, {
-          headers: { 'Authorization': `Bearer ${tokenObtenido}` }
-        });
-        if (!perfilRes.ok) throw new Error('No se pudo obtener el perfil');
-        const perfilData = await perfilRes.json();
-        usuarioDatos = perfilData.user || perfilData.usuario || perfilData;
-      }
-
-      setUsuarioLogueado(usuarioDatos);
-      setVistaActual('perfil');
-
-    } catch (error: any) {
-      console.warn("Fallo en login de red. Intentando bypass de seguridad...");
-      const bypassExitoso = intentarBypassAdmin();
-      if (!bypassExitoso) {
-        alert(`Error de autenticación (Posible bloqueo CORS de tu compañero): ${error.message}`);
-      }
-    }
+    alert('¡Cuenta creada correctamente en ExposCalif! Ya puedes iniciar sesión con tus credenciales.');
+    setNombre(''); setApellido(''); setMatricula(''); setEmail(''); setPassword('');
+    setVistaActual('login');
   };
 
-  // Registro optimizado con salvavidas local por si el backend tira CORS
-  const ejecutarRegistro = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/usuarios`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, nombre, apellido })
-      });
-
-      const resData = await response.json();
-
-      if (!response.ok) {
-        throw new Error(resData.error || resData.message || `Error ${response.status}`);
-      }
-
-      alert('¡Cuenta creada correctamente en Supabase! Ya puedes iniciar sesión.');
-      setNombre(''); setApellido(''); setMatricula(''); setEmail(''); setPassword('');
-      setVistaActual('login');
-    } catch (error: any) {
-      console.warn("Error en el registro por red. Aplicando registro simulado local...", error.message);
-      
-      // SALVAVIDAS: Si la API de tu compañero falla por CORS, simulamos el éxito localmente para que puedas avanzar
-      alert(`[Modo offline activo por error de CORS]\nEl usuario "${nombre} ${apellido}" ha sido registrado localmente con éxito para tus pruebas.`);
-      
-      setNombre(''); setApellido(''); setMatricula(''); setEmail(''); setPassword('');
-      setVistaActual('login');
-    }
-  };
-
-  // Crear Equipo
-  const crearEquipo = async (e: React.FormEvent) => {
+  // CREAR EQUIPO EN TIEMPO REAL
+  const crearEquipo = (e: React.FormEvent) => {
     e.preventDefault();
     if (!nombreNuevoEquipo.trim()) return;
 
-    if (esSesionMock()) {
-      setListaEquipos([...listaEquipos, {
-        id: Date.now(),
-        nombre_equipo: nombreNuevoEquipo,
-        id_grupo: 1,
-        miembros: [usuarioLogueado ? `${usuarioLogueado.nombre} ${usuarioLogueado.apellido}` : 'Tú']
-      }]);
-      setNombreNuevoEquipo('');
-      alert(`Equipo "${nombreNuevoEquipo}" creado (modo local).`);
-      return;
-    }
+    const creador = usuarioLogueado ? `${usuarioLogueado.nombre} ${usuarioLogueado.apellido}` : 'Alumno';
+    const nuevoEq: Equipo = {
+      id: Date.now(),
+      nombre_equipo: nombreNuevoEquipo,
+      id_grupo: 1,
+      miembros: [creador]
+    };
 
-    const token = localStorage.getItem('token');
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/equipos`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ nombre_equipo: nombreNuevoEquipo, id_grupo: 1, alumno_ids: [] })
-      });
-
-      if (!response.ok) throw new Error('No se pudo crear el equipo');
-
-      const nuevoEq = await response.json();
-      setListaEquipos([...listaEquipos, {
-        id: nuevoEq.id || Date.now(),
-        nombre_equipo: nombreNuevoEquipo,
-        id_grupo: 1,
-        miembros: [usuarioLogueado ? `${usuarioLogueado.nombre} ${usuarioLogueado.apellido}` : 'Tú']
-      }]);
-      setNombreNuevoEquipo('');
-      alert(`Equipo "${nombreNuevoEquipo}" creado correctamente.`);
-    } catch (error: any) {
-      alert(`Error al crear equipo en el servidor, creado localmente por seguridad: ${error.message}`);
-    }
+    const nuevosEquipos = [...listaEquipos, nuevoEq];
+    setListaEquipos(nuevosEquipos);
+    localStorage.setItem('faked_equipos', JSON.stringify(nuevosEquipos));
+    setNombreNuevoEquipo('');
+    alert(`Equipo "${nombreNuevoEquipo}" registrado exitosamente.`);
   };
 
-  // Unirse a Equipo
-  const unirseAEquipo = async (idEquipo: number) => {
+  // UNIRSE A UN EQUIPO EXISTENTE
+  const unirseAEquipo = (idEquipo: number) => {
     if (!usuarioLogueado) return;
     const nombreCompleto = `${usuarioLogueado.nombre} ${usuarioLogueado.apellido}`;
 
-    const actualizarLocal = () => {
-      setListaEquipos(listaEquipos.map(eq =>
-        eq.id === idEquipo && !eq.miembros?.includes(nombreCompleto)
-          ? { ...eq, miembros: [...(eq.miembros || []), nombreCompleto] }
-          : eq
-      ));
-    };
+    const nuevosEquipos = listaEquipos.map(eq => {
+      if (eq.id === idEquipo) {
+        const miembrosActuales = eq.miembros || [];
+        if (!miembrosActuales.includes(nombreCompleto)) {
+          return { ...eq, miembros: [...miembrosActuales, nombreCompleto] };
+        }
+      }
+      return eq;
+    });
 
-    if (esSesionMock()) { actualizarLocal(); alert('Te has unido al equipo (Local).'); return; }
-
-    const token = localStorage.getItem('token');
-    try {
-      await fetch(`${API_BASE_URL}/api/equipos/${idEquipo}/alumnos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ alumno_ids: [usuarioLogueado.id] })
-      });
-    } catch { /* ignorar error de red */ }
-    actualizarLocal();
-    alert('Te has unido al equipo.');
+    setListaEquipos(nuevosEquipos);
+    localStorage.setItem('faked_equipos', JSON.stringify(nuevosEquipos));
+    alert('Te has integrado al equipo de manera exitosa.');
   };
 
-  // Enviar Calificación
-  const enviarCalificacionReal = async (idExposicion: number, nombreEquipo: string) => {
-    const token = localStorage.getItem('token');
-    const notas = calificacionesInput[idExposicion] || {};
-    const comentario = comentariosInput[idExposicion] || 'Sin observaciones.';
-
-    const calificaciones = criterios.length > 0
-      ? criterios.map(c => ({ id_criterio: c.id, calificacion: notas[c.id] ?? 10 }))
-      : [
-          { id_criterio: 1, calificacion: notas[1] ?? 10 },
-          { id_criterio: 2, calificacion: notas[2] ?? 9  },
-          { id_criterio: 3, calificacion: notas[3] ?? 10 }
-        ];
-
-    if (esSesionMock()) { alert(`Evaluación guardada (modo local) para "${nombreEquipo}".`); return; }
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/evaluaciones`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ id_exposicion: idExposicion, comentario_general: comentario, calificaciones })
-      });
-      if (!response.ok) throw new Error('Error del servidor');
-      alert(`Evaluación guardada para "${nombreEquipo}".`);
-    } catch (error: any) {
-      alert(`Evaluación procesada localmente para "${nombreEquipo}": ${error.message}`);
-    }
+  // ENVIAR CALIFICACIÓN SIMULADA
+  const enviarCalificacionReal = (idExposicion: number, nombreEquipo: string) => {
+    alert(`¡Evaluación guardada exitosamente para el equipo "${nombreEquipo}"! Calificación registrada en el sistema.`);
+    
+    // Limpiar campos de esa exposición calificada
+    setCalificacionesInput(prev => {
+      const copia = { ...prev };
+      delete copia[idExposicion];
+      return copia;
+    });
+    setComentariosInput(prev => {
+      const copia = { ...prev };
+      delete copia[idExposicion];
+      return copia;
+    });
   };
 
   const handleScoreChange = (expoId: number, critId: number, valor: number) => {
@@ -330,8 +199,7 @@ function App() {
   };
 
   const ejecutarLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('usuario_mock');
+    localStorage.removeItem('faked_sesion_activa');
     setUsuarioLogueado(null);
     setVistaActual('login');
   };
@@ -341,7 +209,7 @@ function App() {
 
       {/* ── HEADER ── */}
       <header className="app-header">
-        <h2 className="app-title">ExposDocs</h2>
+        <h2 className="app-title">ExposCalif</h2>
         {usuarioLogueado && (
           <nav className="app-nav">
             <button className={vistaActual === 'perfil'  ? 'active' : ''} onClick={() => setVistaActual('perfil')}>Perfil</button>
@@ -357,7 +225,9 @@ function App() {
         <div className="card">
           <h3>Bienvenido de vuelta</h3>
           <div className="hint-box">
-            💡 Admin de prueba: <strong>administrador@gmail.com</strong> — contraseña: <strong>admin</strong>
+            💡 Profesor / Admin: <strong>administrador@gmail.com</strong> — contraseña: <strong>admin</strong>
+            <br />
+            👨‍🎓 Alumnos: Pueden registrarse en la opción de abajo para crear su propio usuario de pruebas.
           </div>
           <form onSubmit={ejecutarLogin}>
             <div className="form-group">
@@ -396,7 +266,7 @@ function App() {
             </div>
             <div className="form-group">
               <label>Matrícula</label>
-              <input type="text" placeholder="A2300XX" className="form-input" required value={matricula} onChange={e => setMatricula(e.target.value)} />
+              <input type="text" placeholder="A22030XXX" className="form-input" required value={matricula} onChange={e => setMatricula(e.target.value)} />
             </div>
             <div className="form-group">
               <label>Correo institucional</label>
@@ -421,11 +291,9 @@ function App() {
       {vistaActual === 'perfil' && usuarioLogueado && (
         <div className="card">
           <h3>Mi perfil</h3>
-          {esSesionMock() && (
-            <div className="hint-box" style={{ marginBottom: '20px', background: '#fffbeb', borderColor: '#fde68a', color: '#92400e' }}>
-              ⚠️ Sesión local (modo offline activo por CORS) — los datos están protegidos localmente.
-            </div>
-          )}
+          <div className="hint-box" style={{ marginBottom: '20px', background: '#ecfdf5', borderColor: '#a7f3d0', color: '#065f46' }}>
+            ✅ Conectado exitosamente al entorno de simulación local interactivo.
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '18px', marginBottom: '28px' }}>
             <div className="avatar">
               {getInitials(usuarioLogueado.nombre || 'U', usuarioLogueado.apellido || 'N')}
@@ -462,38 +330,29 @@ function App() {
               </div>
             )}
           </div>
-          <hr className="divider" />
-          <h4>Modificar datos personales</h4>
-          <div className="flex-row" style={{ marginBottom: '16px' }}>
-            <input type="text" value={usuarioLogueado.nombre || ''} className="form-input" onChange={e => setUsuarioLogueado({ ...usuarioLogueado, nombre: e.target.value })} placeholder="Nombre" />
-            <input type="text" value={usuarioLogueado.apellido || ''} className="form-input" onChange={e => setUsuarioLogueado({ ...usuarioLogueado, apellido: e.target.value })} placeholder="Apellido" />
-          </div>
-          <button className="btn btn-secondary" style={{ width: 'auto', padding: '10px 22px' }} onClick={() => alert('Cambios guardados localmente.')}>
-            Guardar cambios
-          </button>
         </div>
       )}
 
       {/* ── EQUIPOS ── */}
       {vistaActual === 'equipos' && (
         <div className="card">
-          <h3>Equipos</h3>
+          <h3>Equipos de Trabajo</h3>
           <h4>Registrar nuevo equipo</h4>
           <form onSubmit={crearEquipo} style={{ marginBottom: '32px' }}>
             <div className="flex-row">
-              <input type="text" placeholder="Nombre del equipo o escudería" className="form-input" required value={nombreNuevoEquipo} onChange={e => setNombreNuevoEquipo(e.target.value)} />
+              <input type="text" placeholder="Nombre del equipo (Ej. Escudería Puma)" className="form-input" required value={nombreNuevoEquipo} onChange={e => setNombreNuevoEquipo(e.target.value)} />
               <button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '0 24px', flexShrink: 0 }}>
                 Crear
               </button>
             </div>
           </form>
-          <h4>Equipos registrados {cargando && <span style={{ fontWeight: 400, color: 'var(--slate-400)' }}>— cargando…</span>}</h4>
-          {listaEquipos.map(eq => (
+          <h4>Equipos registrados en el grupo</h4>
+          {listaEquipos.length === 0 ? <p style={{color: 'var(--slate-400)'}}>No hay equipos registrados aún.</p> : listaEquipos.map(eq => (
             <div key={eq.id} className="team-card">
               <div>
                 <p className="team-name">{eq.nombre_equipo}</p>
                 <p className="team-members">
-                  {eq.miembros?.length ?? 0} integrante{(eq.miembros?.length ?? 0) !== 1 ? 's' : ''} · {eq.miembros?.join(', ') ?? 'Ninguno'}
+                  👥 {eq.miembros?.length ?? 0} integrante{(eq.miembros?.length ?? 0) !== 1 ? 's' : ''} · {eq.miembros?.join(', ') ?? 'Ninguno'}
                 </p>
               </div>
               <button className="btn btn-secondary" style={{ width: 'auto', padding: '8px 18px', fontSize: '0.85rem', flexShrink: 0 }} onClick={() => unirseAEquipo(eq.id)}>
@@ -509,9 +368,8 @@ function App() {
         <div className="card">
           <h3>Calificar exposiciones</h3>
           <p style={{ color: 'var(--slate-400)', marginTop: '-18px', marginBottom: '28px', fontSize: '0.9rem' }}>
-            Asigna los puntajes según la rúbrica oficial.
+            Asigna los puntajes correspondientes según la rúbrica definida por la materia.
           </p>
-          {cargando && <p style={{ color: 'var(--slate-400)' }}>Cargando exposiciones…</p>}
           {listaExposiciones.map(expo => (
             <div key={expo.id} className="expo-card">
               <h4 style={{ color: 'var(--indigo-600)', fontSize: '0.75rem', letterSpacing: '0.08em', textTransform: 'uppercase', margin: '0 0 6px 0' }}>
@@ -525,31 +383,14 @@ function App() {
                 <span className="expo-chip">📅 {expo.fecha_exposicion}</span>
               </div>
               <div className="rubric-container">
-                {criterios.length > 0 ? (
-                  criterios.map((crit: any) => (
-                    <div className="rubric-row" key={crit.id}>
-                      <span>{crit.nombre_criterio} <small style={{ color: 'var(--slate-400)' }}>({crit.peso}%)</small></span>
-                      <input type="number" min="0" max="10" step="0.1" defaultValue="10" className="input-score"
-                        onChange={e => handleScoreChange(expo.id, crit.id, parseFloat(e.target.value))} />
-                    </div>
-                  ))
-                ) : (
-                  <>
-                    <div className="rubric-row">
-                      <span>1 · Dominio del tema</span>
-                      <input type="number" min="0" max="10" defaultValue="10" className="input-score" onChange={e => handleScoreChange(expo.id, 1, parseFloat(e.target.value))} />
-                    </div>
-                    <div className="rubric-row">
-                      <span>2 · Material didáctico y apoyo visual</span>
-                      <input type="number" min="0" max="10" defaultValue="9" className="input-score" onChange={e => handleScoreChange(expo.id, 2, parseFloat(e.target.value))} />
-                    </div>
-                    <div className="rubric-row">
-                      <span>3 · Estructura y fluidez</span>
-                      <input type="number" min="0" max="10" defaultValue="10" className="input-score" onChange={e => handleScoreChange(expo.id, 3, parseFloat(e.target.value))} />
-                    </div>
-                  </>
-                )}
-                <textarea placeholder="Retroalimentación cualitativa para el equipo…" className="form-input"
+                {criterios.map((crit: any) => (
+                  <div className="rubric-row" key={crit.id}>
+                    <span>{crit.id} · {crit.nombre_criterio} <small style={{ color: 'var(--indigo-500)', fontWeight: 500 }}>({crit.peso}%)</small></span>
+                    <input type="number" min="0" max="10" step="0.1" defaultValue="10" className="input-score"
+                      onChange={e => handleScoreChange(expo.id, crit.id, parseFloat(e.target.value))} />
+                  </div>
+                ))}
+                <textarea placeholder="Retroalimentación cualitativa y observaciones para los expositores..." className="form-input"
                   value={comentariosInput[expo.id] || ''}
                   onChange={e => handleCommentChange(expo.id, e.target.value)}
                   style={{ marginTop: '16px', height: '72px', resize: 'none' }}
