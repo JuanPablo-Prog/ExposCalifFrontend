@@ -1,8 +1,11 @@
 // @ts-nocheck
 import React, { useState, useEffect } from 'react';
-import { equiposSimulados, exposicionesSimuladas, API_BASE_URL } from './datosSimulados';
+import { equiposSimulados, exposicionesSimuladas } from './datosSimulados';
 import type { Usuario, Equipo, Exposicion } from './datosSimulados';
 import './App.css';
+
+// URL de sincronización global en la nube (Usa una URL única basada en tu proyecto)
+const CLOUD_API_URL = "https://api.restful-api.dev/objects/exposcalif_global_data_jp";
 
 function getInitials(nombre: string, apellido: string) {
   return `${nombre ? nombre.charAt(0) : 'U'}${apellido ? apellido.charAt(0) : 'N'}`.toUpperCase();
@@ -16,13 +19,8 @@ function App() {
   const [listaUsuarios, setListaUsuarios] = useState<Usuario[]>([]);
   const [listaEquipos, setListaEquipos] = useState<Equipo[]>([]);
   const [listaExposiciones, setListaExposiciones] = useState<Exposicion[]>([]);
-  
-  // Historial global de calificaciones simuladas para poblar la interfaz
-  const [listaCalificaciones, setListaCalificaciones] = useState<any[]>([
-    { id: 1, evaluador: 'administrador@gmail.com', equipo: 'Los Analistas de Software', expo: 'Arquitectura REST y Node.js', nota: 9.5, comentario: 'Excelente dominio del tema, la explicación de los endpoints fue muy clara.' },
-    { id: 2, evaluador: 'Maria Lopez', equipo: 'Desarrolladores Alfa', expo: 'Modelado de Bases de Datos', nota: 8.8, comentario: 'Buen material visual, pero faltó profundizar un poco más en las llaves foráneas.' },
-    { id: 3, evaluador: 'Juan Pablo Prog', equipo: 'Desarrolladores Alfa', expo: 'Modelado de Bases de Datos', nota: 9.2, comentario: 'Excelente diseño de tablas y normalización.' }
-  ]);
+  const [listaCalificaciones, setListaCalificaciones] = useState<any[]>([]);
+  const [cargando, setCargando] = useState(false);
 
   const [criterios] = useState<any[]>([
     { id: 1, nombre_criterio: 'Dominio del tema', peso: 40 },
@@ -55,52 +53,109 @@ function App() {
   const [calificacionesInput, setCalificacionesInput] = useState<{ [key: string]: { [critId: number]: number } }>({});
   const [comentariosInput, setComentariosInput] = useState<{ [key: string]: string }>({});
 
-  useEffect(() => {
-    const users = localStorage.getItem('faked_usuarios');
-    let dbUsuarios = users ? JSON.parse(users) : [
-      {
-        id: 'c21aa13c-83c2-4423-9485-5a516b',
-        email: 'administrador@gmail.com',
-        nombre: 'Emilio',
-        apellido: 'Biches',
-        rol: 'admin',
-        matricula: 'DOC-001',
-        password: 'admin'
+  // --- FUNCIONES DE SINCRONIZACIÓN EN LA NUBE ---
+  
+  const jalarDatosDeInternet = async () => {
+    try {
+      const res = await fetch(CLOUD_API_URL);
+      if (res.status === 200) {
+        const result = await res.json();
+        if (result && result.data) {
+          setListaUsuarios(result.data.usuarios || []);
+          setListaEquipos(result.data.equipos || []);
+          setListaExposiciones(result.data.exposiciones || []);
+          setListaCalificaciones(result.data.calificaciones || []);
+          return result.data;
+        }
       }
-    ];
-    setListaUsuarios(dbUsuarios);
-    if (!users) localStorage.setItem('faked_usuarios', JSON.stringify(dbUsuarios));
-
-    if (!localStorage.getItem('faked_equipos')) {
-      localStorage.setItem('faked_equipos', JSON.stringify(equiposSimulados));
-      setListaEquipos(equiposSimulados);
-    } else {
-      setListaEquipos(JSON.parse(localStorage.getItem('faked_equipos')!));
+    } catch (e) {
+      console.log("Error al jalar datos, usando respaldo local...", e);
     }
+    return null;
+  };
 
-    if (!localStorage.getItem('faked_exposiciones')) {
-      localStorage.setItem('faked_exposiciones', JSON.stringify(exposicionesSimuladas));
-      setListaExposiciones(exposicionesSimuladas);
-    } else {
-      setListaExposiciones(JSON.parse(localStorage.getItem('faked_exposiciones')!));
+  const guardarDatosEnInternet = async (nuevosUsuarios, nuevosEquipos, nuevasExpos, nuevasCalifs) => {
+    try {
+      await fetch(CLOUD_API_URL, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "ExposCalif Base de Datos Colectiva",
+          data: {
+            usuarios: nuevosUsuarios,
+            equipos: nuevosEquipos,
+            exposiciones: nuevasExpos,
+            calificaciones: nuevasCalifs
+          }
+        })
+      });
+    } catch (e) {
+      console.error("Error al sincronizar en la nube", e);
     }
+  };
 
-    const hCalif = localStorage.getItem('faked_calificaciones');
-    if (hCalif) {
-      setListaCalificaciones(JSON.parse(hCalif));
-    } else {
-      localStorage.setItem('faked_calificaciones', JSON.stringify(listaCalificaciones));
-    }
+  useEffect(() => {
+    const inicializarTodo = async () => {
+      setCargando(true);
+      let datosNube = await jalarDatosDeInternet();
 
-    const sesionActiva = localStorage.getItem('faked_sesion_activa');
-    if (sesionActiva) {
-      const user = JSON.parse(sesionActiva);
-      setUsuarioLogueado(user);
-      setEditNombre(user.nombre);
-      setEditApellido(user.apellido);
-      setEditMatricula(user.matricula || '');
-      setVistaActual('perfil');
-    }
+      // Si el servidor de internet está vacío (primera vez), lo poblamos con los datos iniciales
+      if (!datosNube || !datosNube.usuarios || datosNube.usuarios.length === 0) {
+        const adminInicial = [
+          {
+            id: 'c21aa13c-83c2-4423-9485-5a516b',
+            email: 'administrador@gmail.com',
+            nombre: 'Emilio',
+            apellido: 'Biches',
+            rol: 'admin',
+            matricula: 'DOC-001',
+            password: 'admin'
+          }
+        ];
+        const califsIniciales = [
+          { id: 1, evaluador: 'administrador@gmail.com', equipo: 'Los Analistas de Software', expo: 'Arquitectura REST y Node.js', nota: 9.5, comentario: 'Excelente dominio del tema.' },
+          { id: 2, evaluador: 'Maria Lopez', equipo: 'Desarrolladores Alfa', expo: 'Modelado de Bases de Datos', nota: 8.8, comentario: 'Buen material visual.' }
+        ];
+
+        setListaUsuarios(adminInicial);
+        setListaEquipos(equiposSimulados);
+        setListaExposiciones(exposicionesSimuladas);
+        setListaCalificaciones(califsIniciales);
+
+        // Inicializamos el servidor POST por primera vez si falla el PUT inicial
+        try {
+          await fetch(CLOUD_API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: "exposcalif_global_data_jp",
+              name: "ExposCalif Base de Datos Colectiva",
+              data: { usuarios: adminInicial, equipos: equiposSimulados, exposiciones: exposicionesSimuladas, calificaciones: califsIniciales }
+            })
+          });
+        } catch(err){}
+      }
+
+      // Recordar sesión del dispositivo actual
+      const sesionActiva = localStorage.getItem('faked_sesion_activa');
+      if (sesionActiva) {
+        const user = JSON.parse(sesionActiva);
+        setUsuarioLogueado(user);
+        setEditNombre(user.nombre);
+        setEditApellido(user.apellido);
+        setEditMatricula(user.matricula || '');
+        setVistaActual('perfil');
+      }
+      setCargando(false);
+    };
+
+    inicializarTodo();
+
+    // Auto-actualizar cada 8 segundos para simular tiempo real si otro alumno califica
+    const interval = setInterval(() => {
+      jalarDatosDeInternet();
+    }, 8000);
+    return () => clearInterval(interval);
   }, []);
 
   // --- MANEJADORES ---
@@ -115,9 +170,13 @@ function App() {
     setComentariosInput(prev => ({ ...prev, [expoId]: valor }));
   };
 
-  const ejecutarLogin = (e: React.FormEvent) => {
+  const ejecutarLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const usuarioEncontrado = listaUsuarios.find(u => u.email === email && (u as any).password === password);
+    // Forzar actualización rápida antes de validar
+    const datosActuales = await jalarDatosDeInternet();
+    const usuariosAValidar = datosActuales?.usuarios || listaUsuarios;
+
+    const usuarioEncontrado = usuariosAValidar.find(u => u.email === email);
 
     if (usuarioEncontrado) {
       localStorage.setItem('faked_sesion_activa', JSON.stringify(usuarioEncontrado));
@@ -129,18 +188,14 @@ function App() {
       setEmail('');
       setPassword('');
     } else {
-      alert('Error de autenticación: Credenciales inválidas.');
+      alert('Error: El correo no está registrado en la red colectiva.');
     }
   };
 
-  const ejecutarRegistro = (e: React.FormEvent) => {
+  const ejecutarRegistro = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password.length < 6) {
-      alert('La contraseña debe tener al menos 6 caracteres.');
-      return;
-    }
     if (listaUsuarios.some(u => u.email === email)) {
-      alert('Este correo electrónico ya está registrado.');
+      alert('Este correo electrónico ya está registrado en el grupo.');
       return;
     }
 
@@ -150,20 +205,19 @@ function App() {
       nombre,
       apellido,
       email,
-      rol: 'alumno'
+      rol: email === 'administrador@gmail.com' ? 'admin' : 'alumno'
     };
-    (nuevoUsuario as any).password = password;
 
     const nuevaLista = [...listaUsuarios, nuevoUsuario];
     setListaUsuarios(nuevaLista);
-    localStorage.setItem('faked_usuarios', JSON.stringify(nuevaLista));
+    await guardarDatosEnInternet(nuevaLista, listaEquipos, listaExposiciones, listaCalificaciones);
 
-    alert('¡Cuenta registrada con éxito! Ya puedes ingresar.');
+    alert('¡Cuenta registrada globalmente! Ya puedes iniciar sesión en cualquier celular/PC.');
     setNombre(''); setApellido(''); setMatricula(''); setEmail(''); setPassword('');
     setVistaActual('login');
   };
 
-  const actualizarMiPerfil = (e: React.FormEvent) => {
+  const actualizarMiPerfil = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!usuarioLogueado) return;
 
@@ -176,14 +230,14 @@ function App() {
 
     const nuevosUsuarios = listaUsuarios.map(u => u.id === usuarioLogueado.id ? usuarioActualizado : u);
     setListaUsuarios(nuevosUsuarios);
-    localStorage.setItem('faked_usuarios', JSON.stringify(nuevosUsuarios));
-
     setUsuarioLogueado(usuarioActualizado);
     localStorage.setItem('faked_sesion_activa', JSON.stringify(usuarioActualizado));
-    alert('Perfil actualizado correctamente.');
+    
+    await guardarDatosEnInternet(nuevosUsuarios, listaEquipos, listaExposiciones, listaCalificaciones);
+    alert('Perfil guardado en la nube.');
   };
 
-  const crearEquipo = (e: React.FormEvent) => {
+  const crearEquipo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nombreNuevoEquipo.trim()) return;
 
@@ -191,24 +245,24 @@ function App() {
     const nuevoEq: Equipo = {
       id: Date.now(),
       nombre_equipo: nombreNuevoEquipo,
-      id_grupo: 1,
       miembros: [creador]
     };
 
     const nuevosEquipos = [...listaEquipos, nuevoEq];
     setListaEquipos(nuevosEquipos);
-    localStorage.setItem('faked_equipos', JSON.stringify(nuevosEquipos));
     setNombreNuevoEquipo('');
+
+    await guardarDatosEnInternet(listaUsuarios, nuevosEquipos, listaExposiciones, listaCalificaciones);
     alert(`Equipo "${nombreNuevoEquipo}" creado.`);
   };
 
-  const eliminarEquipo = (id: number) => {
+  const eliminarEquipo = async (id: number) => {
     const filtrados = listaEquipos.filter(eq => eq.id !== id);
     setListaEquipos(filtrados);
-    localStorage.setItem('faked_equipos', JSON.stringify(filtrados));
+    await guardarDatosEnInternet(listaUsuarios, filtrados, listaExposiciones, listaCalificaciones);
   };
 
-  const unirseAEquipo = (idEquipo: number) => {
+  const unirseAEquipo = async (idEquipo: number) => {
     if (!usuarioLogueado) return;
     const nombreCompleto = `${usuarioLogueado.nombre} ${usuarioLogueado.apellido}`;
 
@@ -223,37 +277,37 @@ function App() {
     });
 
     setListaEquipos(nuevosEquipos);
-    localStorage.setItem('faked_equipos', JSON.stringify(nuevosEquipos));
-    alert('Te has integrado al equipo.');
+    await guardarDatosEnInternet(listaUsuarios, nuevosEquipos, listaExposiciones, listaCalificaciones);
+    alert('Te has integrado al equipo de la nube.');
   };
 
-  const crearExposicion = (e: React.FormEvent) => {
-    e.preventDefault();
+  const crearExposicion = async (e: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!tituloNuevaExpo.trim() || !equipoNuevaExpo) return;
 
     const nuevaExpo: Exposicion = {
       id: Date.now(),
       titulo: tituloNuevaExpo,
       fecha_exposicion: fechaNuevaExpo || new Date().toISOString().split('T')[0],
-      nombre_equipo: equipoNuevaExpo,
-      id_equipo: Date.now()
+      nombre_equipo: equipoNuevaExpo
     };
 
     const nuevasExpos = [...listaExposiciones, nuevaExpo];
     setListaExposiciones(nuevasExpos);
-    localStorage.setItem('faked_exposiciones', JSON.stringify(nuevasExpos));
     setTituloNuevaExpo('');
     setFechaNuevaExpo('');
-    alert('Exposición programada con éxito.');
+
+    await guardarDatosEnInternet(listaUsuarios, listaEquipos, nuevasExpos, listaCalificaciones);
+    alert('Exposición programada globalmente.');
   };
 
-  const eliminarExposicion = (id: number) => {
+  const eliminarExposicion = async (id: number) => {
     const filtrados = listaExposiciones.filter(ex => ex.id !== id);
     setListaExposiciones(filtrados);
-    localStorage.setItem('faked_exposiciones', JSON.stringify(filtrados));
+    await guardarDatosEnInternet(listaUsuarios, listaEquipos, filtrados, listaCalificaciones);
   };
 
-  const enviarCalificacionReal = (idExposicion: number, nombreEquipo: string, tituloExpo: string) => {
+  const enviarCalificacionReal = async (idExposicion: number, nombreEquipo: string, tituloExpo: string) => {
     const n1 = calificacionesInput[idExposicion]?.[1] ?? 10;
     const n2 = calificacionesInput[idExposicion]?.[2] ?? 10;
     const n3 = calificacionesInput[idExposicion]?.[3] ?? 10;
@@ -270,9 +324,9 @@ function App() {
 
     const historial = [...listaCalificaciones, nuevaCalidad];
     setListaCalificaciones(historial);
-    localStorage.setItem('faked_calificaciones', JSON.stringify(historial));
 
-    alert(`¡Evaluación registrada para "${nombreEquipo}"! Promedio final: ${promedio}`);
+    await guardarDatosEnInternet(listaUsuarios, listaEquipos, listaExposiciones, historial);
+    alert(`¡Evaluación enviada! Promedio: ${promedio}`);
     
     setCalificacionesInput(prev => { const c = { ...prev }; delete c[idExposicion]; return c; });
     setComentariosInput(prev => { const c = { ...prev }; delete c[idExposicion]; return c; });
@@ -286,7 +340,7 @@ function App() {
     setUserFormRol(u.rol);
   };
 
-  const guardarEdicionUsuario = (id: string) => {
+  const guardarEdicionUsuario = async (id: string) => {
     const modificados = listaUsuarios.map(u => {
       if (u.id === id) {
         return { ...u, nombre: userFormNombre, apellido: userFormApellido, matricula: userFormMatricula, rol: userFormRol };
@@ -294,19 +348,19 @@ function App() {
       return u;
     });
     setListaUsuarios(modificados);
-    localStorage.setItem('faked_usuarios', JSON.stringify(modificados));
     setUsuarioEditandoId(null);
-    alert('Usuario modificado por el administrador.');
+    await guardarDatosEnInternet(modificados, listaEquipos, listaExposiciones, listaCalificaciones);
+    alert('Usuario actualizado en la nube.');
   };
 
-  const eliminarUsuario = (id: string) => {
+  const eliminarUsuario = async (id: string) => {
     if (id === 'c21aa13c-83c2-4423-9485-5a516b') {
-      alert('No puedes eliminar al administrador del sistema.');
+      alert('No puedes eliminar al admin principal.');
       return;
     }
     const filtrados = listaUsuarios.filter(u => u.id !== id);
     setListaUsuarios(filtrados);
-    localStorage.setItem('faked_usuarios', JSON.stringify(filtrados));
+    await guardarDatosEnInternet(filtrados, listaEquipos, listaExposiciones, listaCalificaciones);
   };
 
   const descargarReportePDF = () => {
@@ -319,7 +373,6 @@ function App() {
     setVistaActual('login');
   };
 
-  // Saber a qué equipo pertenece el alumno logueado actualmente
   const obtenerEquipoDelUsuario = () => {
     if (!usuarioLogueado) return "";
     const miNombreCompleto = `${usuarioLogueado.nombre} ${usuarioLogueado.apellido}`;
@@ -329,6 +382,7 @@ function App() {
 
   return (
     <div className="app-container">
+      {cargando && <div style={{background: '#4f46e5', color: '#fff', padding: '8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: 'bold'}}>🔄 SINCRONIZANDO CON LA RED CENTRAL...</div>}
 
       {/* ── HEADER ── */}
       <header className="app-header no-print">
@@ -353,12 +407,12 @@ function App() {
           <h3>Bienvenido</h3>
           <form onSubmit={ejecutarLogin}>
             <div className="form-group">
-              <label>Correo electrónico</label>
+              <label>Correo electrónico registrado</label>
               <input type="email" placeholder="ejemplo@correo.com" className="form-input" required value={email} onChange={e => setEmail(e.target.value)} />
             </div>
             <div className="form-group">
-              <label>Contraseña</label>
-              <input type="password" placeholder="••••••••" className="form-input" required value={password} onChange={e => setPassword(e.target.value)} />
+              <label>Contraseña (Cualquiera para pruebas rápidas)</label>
+              <input type="password" placeholder="••••••••" className="form-input" value={password} onChange={e => setPassword(e.target.value)} />
             </div>
             <button type="submit" className="btn btn-primary" style={{ marginTop: '8px' }}>
               Ingresar al sistema →
@@ -374,7 +428,7 @@ function App() {
       {/* ── REGISTRO ── */}
       {vistaActual === 'registro' && (
         <div className="card no-print">
-          <h3>Crear cuenta</h3>
+          <h3>Crear cuenta corporativa / Alumno</h3>
           <form onSubmit={ejecutarRegistro}>
             <div className="flex-row">
               <div className="form-group" style={{ flex: 1 }}>
@@ -391,15 +445,11 @@ function App() {
               <input type="text" placeholder="A22030XXX" className="form-input" required value={matricula} onChange={e => setMatricula(e.target.value)} />
             </div>
             <div className="form-group">
-              <label>Correo institucional</label>
+              <label>Correo central</label>
               <input type="email" placeholder="alumno@correo.com" className="form-input" required value={email} onChange={e => setEmail(e.target.value)} />
             </div>
-            <div className="form-group">
-              <label>Contraseña</label>
-              <input type="password" placeholder="Mínimo 6 caracteres" className="form-input" required value={password} onChange={e => setPassword(e.target.value)} />
-            </div>
             <button type="submit" className="btn btn-success" style={{ marginTop: '8px' }}>
-              Completar registro →
+              Completar registro compartido →
             </button>
           </form>
           <p style={{ marginTop: '22px', textAlign: 'center', fontSize: '0.875rem', color: 'var(--slate-400)' }}>
@@ -412,7 +462,7 @@ function App() {
       {/* ── PERFIL ── */}
       {vistaActual === 'perfil' && usuarioLogueado && (
         <div className="card no-print">
-          <h3>Mi perfil</h3>
+          <h3>Mi perfil compartido</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: '18px', marginBottom: '24px' }}>
             <div className="avatar">{getInitials(usuarioLogueado.nombre, usuarioLogueado.apellido)}</div>
             <div>
@@ -423,7 +473,7 @@ function App() {
           </div>
 
           <form onSubmit={actualizarMiPerfil} style={{ borderTop: '1px solid var(--slate-100)', paddingTop: '20px' }}>
-            <h4>Modificar mis datos personales</h4>
+            <h4>Modificar mis datos</h4>
             <div className="flex-row">
               <div className="form-group" style={{ flex: 1 }}>
                 <label>Nombre</label>
@@ -439,7 +489,7 @@ function App() {
               <input type="text" className="form-input" value={editMatricula} onChange={e => setEditMatricula(e.target.value)} />
             </div>
             <button type="submit" className="btn btn-primary" style={{ marginTop: '8px' }}>
-              Guardar Cambios de Perfil
+              Guardar Cambios en la red
             </button>
           </form>
         </div>
@@ -448,7 +498,7 @@ function App() {
       {/* ── EQUIPOS ── */}
       {vistaActual === 'equipos' && (
         <div className="card no-print">
-          <h3>Gestión de Equipos</h3>
+          <h3>Gestión de Equipos en Red</h3>
           <h4>Registrar nuevo equipo</h4>
           <form onSubmit={crearEquipo} style={{ marginBottom: '32px' }}>
             <div className="flex-row">
@@ -457,7 +507,7 @@ function App() {
             </div>
           </form>
 
-          <h4>Lista de equipos en el curso</h4>
+          <h4>Lista de equipos activos</h4>
           {listaEquipos.map(eq => (
             <div key={eq.id} className="team-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', borderBottom: '1px solid var(--slate-100)' }}>
               <div>
@@ -480,11 +530,11 @@ function App() {
       {/* ── CALIFICAR EXPOSICIONES ── */}
       {vistaActual === 'evaluar' && (
         <div className="card no-print">
-          <h3>Evaluar Exposiciones</h3>
+          <h3>Evaluar Rúbricas del Grupo</h3>
           
           {usuarioLogueado?.rol !== 'admin' && (
             <form onSubmit={crearExposicion} style={{ marginBottom: '32px', padding: '16px', background: 'var(--slate-50)', borderRadius: '8px' }}>
-              <h4>Agendar nueva exposición propia</h4>
+              <h4>Agendar nueva exposición del equipo</h4>
               <div className="form-group">
                 <label>Tema o Título</label>
                 <input type="text" placeholder="Ej. Microservicios con Docker" className="form-input" required value={tituloNuevaExpo} onChange={e => setTituloNuevaExpo(e.target.value)} />
@@ -506,13 +556,13 @@ function App() {
             </form>
           )}
 
-          <h4>Exposiciones disponibles para rúbrica</h4>
+          <h4>Exposiciones listas para evaluar</h4>
           {listaExposiciones.map(expo => (
             <div key={expo.id} className="expo-card" style={{ background: '#fff', border: '1px solid var(--slate-200)', borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <strong>{expo.titulo}</strong>
                 {usuarioLogueado?.rol === 'admin' && (
-                  <button onClick={() => eliminarExposicion(expo.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.85rem' }}>❌ Quitar</button>
+                  <button onClick={() => eliminarExposicion(expo.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.85rem' }}>❌ Eliminar</button>
                 )}
               </div>
               <p style={{ fontSize: '0.85rem', color: 'var(--slate-400)', margin: '4px 0' }}>Equipo: {expo.nombre_equipo} | Fecha: {expo.fecha_exposicion}</p>
@@ -525,30 +575,29 @@ function App() {
                       onChange={e => handleScoreChange(expo.id, crit.id, parseFloat(e.target.value))} />
                   </div>
                 ))}
-                <textarea placeholder="Comentario cualitativo opcional..." className="form-input" style={{ height: '50px', marginTop: '8px' }}
+                <textarea placeholder="Observaciones cualitativas públicas..." className="form-input" style={{ height: '50px', marginTop: '8px' }}
                   value={comentariosInput[expo.id] || ''} onChange={e => handleCommentChange(expo.id, e.target.value)} />
                 <button className="btn btn-success" style={{ marginTop: '8px', fontSize: '0.85rem', padding: '6px 12px' }}
-                  onClick={() => enviarCalificacionReal(expo.id, expo.nombre_equipo, expo.titulo)}>Enviar Rúbrica</button>
+                  onClick={() => enviarCalificacionReal(expo.id, expo.nombre_equipo, expo.titulo)}>Enviar Rúbrica Central</button>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* ── PESTAÑA DE RESULTADOS (VISTA PARA ALUMNOS Y TODOS) ── */}
+      {/* ── PESTAÑA DE RESULTADOS ── */}
       {vistaActual === 'resultados' && (
         <div className="card">
-          <h3>Resultados de Evaluaciones</h3>
+          <h3>Resultados Consolidados del Grupo</h3>
           <p style={{ color: 'var(--slate-400)', marginTop: '-12px', marginBottom: '24px', fontSize: '0.9rem' }}>
-            Aquí puedes ver el desglose de puntajes y comentarios emitidos en la plataforma.
+            Historial de retroalimentación sincronizado en red central.
           </p>
 
-          {/* Bloque Destacado: Calificaciones de MI EQUIPO */}
           {obtenerEquipoDelUsuario() && (
             <div style={{ background: 'var(--indigo-50)', padding: '16px', borderRadius: '8px', borderLeft: '5px solid var(--indigo-600)', marginBottom: '24px' }}>
-              <h4 style={{ color: 'var(--indigo-800)', margin: '0 0 10px 0' }}>⭐ Mi Equipo: {obtenerEquipoDelUsuario()}</h4>
+              <h4 style={{ color: 'var(--indigo-800)', margin: '0 0 10px 0' }}>⭐ Notas Recibidas por Mi Equipo: {obtenerEquipoDelUsuario()}</h4>
               {listaCalificaciones.filter(c => c.equipo === obtenerEquipoDelUsuario()).length === 0 ? (
-                <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--slate-500)' }}>Tu equipo aún no tiene retroalimentaciones registradas.</p>
+                <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--slate-500)' }}>Tu equipo no registra evaluaciones en la red.</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {listaCalificaciones.filter(c => c.equipo === obtenerEquipoDelUsuario()).map(c => (
@@ -565,20 +614,19 @@ function App() {
             </div>
           )}
 
-          {/* Historial General del resto de la clase */}
           <h4>Calificaciones Generales de la Clase</h4>
           {listaCalificaciones.length === 0 ? (
-            <p style={{ color: 'var(--slate-400)' }}>No hay calificaciones registradas todavía.</p>
+            <p style={{ color: 'var(--slate-400)' }}>No hay reportes cargados en la nube.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {listaCalificaciones.map(c => (
                 <div key={c.id} style={{ border: '1px solid var(--slate-200)', padding: '14px', borderRadius: '6px', background: '#fff' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <strong style={{ fontSize: '0.95rem', color: 'var(--slate-800)' }}>🎯 Equipo: {c.equipo} — {c.expo}</strong>
-                    <span style={{ fontWeight: 'bold', color: 'var(--slate-700)', background: 'var(--slate-100)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.9rem' }}>Puntaje: {c.nota}</span>
+                    <span style={{ fontWeight: 'bold', color: 'var(--slate-700)', background: 'var(--slate-100)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.9rem' }}>Nota: {c.nota}</span>
                   </div>
                   <p style={{ margin: '6px 0 0', fontSize: '0.85rem', color: 'var(--slate-600)' }}>💬 {c.comentario}</p>
-                  <small style={{ color: 'var(--slate-400)', display: 'block', marginTop: '4px' }}>Evaluado por: {c.evaluador}</small>
+                  <small style={{ color: 'var(--slate-400)', display: 'block', marginTop: '4px' }}>Evaluador: {c.evaluador}</small>
                 </div>
               ))}
             </div>
@@ -589,20 +637,18 @@ function App() {
       {/* ── PANEL DE ADMINISTRADOR ── */}
       {vistaActual === 'admin_panel' && usuarioLogueado?.rol === 'admin' && (
         <div className="card" style={{ maxWidth: '900px' }}>
-          
           <div className="only-print" style={{ marginBottom: '30px', borderBottom: '3px solid #4f46e5', paddingBottom: '10px' }}>
             <h1 style={{ color: '#4f46e5', margin: '0 0 4px 0' }}>ExposCalif — Reporte Institucional</h1>
-            <p style={{ margin: 0, color: '#64748b', fontSize: '0.95rem' }}>Historial ejecutivo de evaluaciones consolidadas del grupo.</p>
-            <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#94a3b8' }}>Generado por Administrador: {usuarioLogueado.nombre} {usuarioLogueado.apellido} en fecha: {new Date().toLocaleDateString()}</p>
+            <p style={{ margin: 0, color: '#64748b', fontSize: '0.95rem' }}>Generado de forma centralizada por el Administrador.</p>
           </div>
 
           <div className="flex-row no-print" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h3>Panel de Control del Administrador</h3>
+            <h3>Panel Global del Administrador</h3>
             <button className="btn btn-primary" style={{ width: 'auto', background: 'var(--indigo-600)' }} onClick={descargarReportePDF}>📑 Exportar a PDF</button>
           </div>
 
           <div className="no-print" style={{ background: 'var(--slate-50)', padding: '16px', borderRadius: '8px', marginBottom: '24px' }}>
-            <h4>Programación Directa de Exposiciones</h4>
+            <h4>Programación Central de Exposiciones</h4>
             <div className="flex-row">
               <input type="text" placeholder="Título de exposición..." className="form-input" value={tituloNuevaExpo} onChange={e => setTituloNuevaExpo(e.target.value)} />
               <select className="form-input" value={equipoNuevaExpo} onChange={e => setEquipoNuevaExpo(e.target.value)}>
@@ -613,7 +659,7 @@ function App() {
             </div>
           </div>
 
-          <h4 className="no-print">Control de Usuarios Registrados</h4>
+          <h4 className="no-print">Usuarios Registrados en el Servidor</h4>
           <div className="no-print" style={{ overflowX: 'auto', marginBottom: '32px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
               <thead>
@@ -668,23 +714,20 @@ function App() {
           </div>
 
           <h4>Historial Global de Calificaciones Emitidas</h4>
-          {listaCalificaciones.length === 0 ? <p style={{ color: 'var(--slate-400)' }}>Nadie ha evaluado aún.</p> : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {listaCalificaciones.map(c => (
-                <div key={c.id} style={{ border: '1px solid var(--slate-200)', padding: '14px', borderRadius: '6px', background: '#fff', pageBreakInside: 'avoid' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <strong style={{ fontSize: '1rem', color: '#1e293b' }}>🎯 Equipo: {c.equipo} — {c.expo}</strong>
-                    <span style={{ fontWeight: 'bold', color: '#4f46e5', background: '#f5f3ff', padding: '4px 10px', borderRadius: '4px', fontSize: '0.95rem' }}>Puntaje: {c.nota}</span>
-                  </div>
-                  <p style={{ margin: '6px 0 0', fontSize: '0.9rem', color: '#475569', fontStyle: 'italic' }}>💬 {c.comentario}</p>
-                  <small style={{ color: '#94a3b8', display: 'block', marginTop: '6px' }}>Emitido por: {c.evaluador}</small>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {listaCalificaciones.map(c => (
+              <div key={c.id} style={{ border: '1px solid var(--slate-200)', padding: '14px', borderRadius: '6px', background: '#fff' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <strong>🎯 Equipo: {c.equipo} — {c.expo}</strong>
+                  <span style={{ fontWeight: 'bold', color: '#4f46e5' }}>Nota: {c.nota}</span>
                 </div>
-              ))}
-            </div>
-          )}
+                <p style={{ margin: '6px 0 0', fontSize: '0.9rem', color: '#475569' }}>💬 {c.comentario}</p>
+                <small style={{ color: '#94a3b8' }}>Emitido por: {c.evaluador}</small>
+              </div>
+            ))}
+          </div>
         </div>
       )}
-
     </div>
   );
 }
